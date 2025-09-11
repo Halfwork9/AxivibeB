@@ -53,7 +53,7 @@ app.use(
 
 app.use(
   cors({
-    origin: "http://localhost:5173","https://axivibe-vojm.vercel.app",
+    origin: "http://localhost:5173",
     methods: ["GET", "POST", "DELETE", "PUT"],
     allowedHeaders: [
       "Content-Type",
