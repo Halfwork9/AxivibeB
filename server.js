@@ -27,7 +27,7 @@ const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 const allowedOrigins = [
   "http://localhost:5173", // dev
-  "https://your-frontend.vercel.app" // replace with your actual Vercel URL
+  "https://axivibe-vojm.vercel.app" // replace with your actual Vercel URL
 ]; 
 
 mongoose
@@ -53,7 +53,7 @@ app.use(
 
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: "http://localhost:5173","https://axivibe-vojm.vercel.app",
     methods: ["GET", "POST", "DELETE", "PUT"],
     allowedHeaders: [
       "Content-Type",
@@ -88,7 +88,7 @@ app.use("/api/admin/categories", categoryRoutes);
 app.use("/api/distributors", distributorRoutes);
 app.use(
   cors({
-    origin: "http://localhost:5173", // your frontend origin
+    origin: "http://localhost:5173","https://axivibe-vojm.vercel.app", // your frontend origin
     credentials: true,               // 👈 allow cookies
   })
 );
