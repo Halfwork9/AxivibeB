@@ -88,7 +88,7 @@ app.use("/api/admin/categories", categoryRoutes);
 app.use("/api/distributors", distributorRoutes);
 app.use(
   cors({
-    origin: "http://localhost:5173","https://axivibe-vojm.vercel.app", // your frontend origin
+    origin: "http://localhost:5173", // your frontend origin
     credentials: true,               // 👈 allow cookies
   })
 );
