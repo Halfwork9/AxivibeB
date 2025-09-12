@@ -7,7 +7,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: "2025-01-27.acacia", // use latest available
 });
 
-// ✅ Create order for both Stripe and Cash on Delivery
+//  Create order for both Stripe and Cash on Delivery
 export const createOrder = async (req, res) => {
   try {
     const {
@@ -98,8 +98,8 @@ export const createOrder = async (req, res) => {
           },
           quantity: item.quantity,
         })),
-        success_url: `http://localhost:5173/shop/payment-success?orderId=${newOrder._id}`,
-        cancel_url: `http://localhost:5173/shop/payment-cancel`,
+        success_url: `https://axivibe-vojm.vercel.app/shop/payment-success?orderId=${newOrder._id}`,
+        cancel_url: `https://axivibe-vojm.vercel.app/shop/payment-cancel`,
         metadata: {
           orderId: newOrder._id.toString(),
         },
@@ -120,7 +120,7 @@ export const createOrder = async (req, res) => {
 };
 
 
-// ✅ Webhook to confirm payment (No changes needed here)
+//  Webhook to confirm payment (No changes needed here)
 export const stripeWebhook = async (req, res) => {
   let event;
 
@@ -172,7 +172,7 @@ export const stripeWebhook = async (req, res) => {
   res.json({ received: true });
 };
 
-// ✅ Get orders for a user
+//  Get orders for a user
 export const getAllOrdersByUser = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -183,7 +183,7 @@ export const getAllOrdersByUser = async (req, res) => {
   }
 };
 
-// ✅ Get single order
+//  Get single order
 export const getOrderDetails = async (req, res) => {
   try {
     const { id } = req.params;
