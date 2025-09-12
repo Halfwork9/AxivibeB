@@ -5,11 +5,9 @@ import User from "../../models/User.js";
 // REGISTER
 export const registerUser = async (req, res) => {
   const { userName, email, password } = req.body;
-  console.log("Incoming register data:", req.body); // 👈 log inputs
 
   try {
     const checkUser = await User.findOne({ email });
-    //console.log("Check user result:", checkUser);
 
     if (checkUser) {
       return res.json({
@@ -30,11 +28,10 @@ export const registerUser = async (req, res) => {
       userName,
       email,
       password: hashPassword,
-      role: "user", // 👈 add default if schema requires
+      role: "user",
     });
 
     await newUser.save();
-    console.log("New user created:", newUser);
 
     res.status(200).json({
       success: true,
@@ -49,7 +46,6 @@ export const registerUser = async (req, res) => {
   }
 };
 
-
 // LOGIN
 export const loginUser = async (req, res) => {
   const { email, password } = req.body;
@@ -63,10 +59,7 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    const checkPasswordMatch = await bcrypt.compare(
-      password,
-      checkUser.password
-    );
+    const checkPasswordMatch = await bcrypt.compare(password, checkUser.password);
     if (!checkPasswordMatch) {
       return res.json({
         success: false,
@@ -81,12 +74,17 @@ export const loginUser = async (req, res) => {
         email: checkUser.email,
         userName: checkUser.userName,
       },
-      "CLIENT_SECRET_KEY",
-      { expiresIn: "60m" }
+      process.env.JWT_SECRET || "CLIENT_SECRET_KEY",
+      { expiresIn: "1d" } // extend session to 1 day
     );
 
     res
-      .cookie("token", token, { httpOnly: true, secure: true,sameSite: "None", })
+      .cookie("token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production", // only secure in prod
+        sameSite: "None", // allow cross-site
+        maxAge: 24 * 60 * 60 * 1000, // 1 day in ms
+      })
       .json({
         success: true,
         message: "Logged in successfully",
@@ -98,7 +96,7 @@ export const loginUser = async (req, res) => {
         },
       });
   } catch (e) {
-    console.error(e);
+    console.error("Login error:", e);
     res.status(500).json({
       success: false,
       message: "Some error occurred",
@@ -108,12 +106,17 @@ export const loginUser = async (req, res) => {
 
 // LOGOUT
 export const logoutUser = (req, res) => {
-  res.clearCookie("token").json({
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "None",
+  }).json({
     success: true,
     message: "Logged out successfully!",
   });
 };
 
+// AUTH MIDDLEWARE
 export const authMiddleware = (req, res, next) => {
   let token = null;
 
@@ -128,10 +131,10 @@ export const authMiddleware = (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, "CLIENT_SECRET_KEY");
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "CLIENT_SECRET_KEY");
     req.user = decoded;
     next();
   } catch (error) {
-    res.status(401).json({ success: false, message: "Unauthorized user!" });
+    return res.status(401).json({ success: false, message: "Unauthorized user!" });
   }
 };
