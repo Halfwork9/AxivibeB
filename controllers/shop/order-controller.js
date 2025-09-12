@@ -65,7 +65,8 @@ export const createOrder = async (req, res) => {
         data: savedOrder,
       });
     }
-    
+    console.log("Incoming order payload:", req.body);
+
     // --- Stripe Payment Logic ---
     else if (paymentMethod === 'stripe') {
       // 1. Save a pending order in DB (as before)
