@@ -18,7 +18,7 @@ export const createOrder = async (req, res) => {
       totalAmount,
       paymentMethod, // This will be 'stripe' or 'cod'
     } = req.body;
-
+      console.log("Incoming order payload:", req.body);
     // --- Cash on Delivery (COD) Logic ---
     if (paymentMethod === 'cod') {
       // 1. Create the new order with COD-specific statuses
@@ -65,7 +65,7 @@ export const createOrder = async (req, res) => {
         data: savedOrder,
       });
     }
-    console.log("Incoming order payload:", req.body);
+  
 
     // --- Stripe Payment Logic ---
     else if (paymentMethod === 'stripe') {
