@@ -162,3 +162,21 @@ router.get("/export/csv", async (req, res) => {
     res.status(500).json({ success: false, message: "Failed to export CSV" });
   }
 });
+
+
+// DELETE /api/distributors/admin/:id (admin only)
+router.delete("/admin/:id", async (req, res) => {
+  try {
+    const distributor = await DistributorApplication.findByIdAndDelete(req.params.id);
+
+    if (!distributor) {
+      return res.status(404).json({ success: false, message: "Application not found" });
+    }
+
+    res.json({ success: true, message: "Distributor application deleted successfully" });
+  } catch (err) {
+    console.error("Admin delete error:", err);
+    res.status(500).json({ success: false, message: "Failed to delete application" });
+  }
+});
+
