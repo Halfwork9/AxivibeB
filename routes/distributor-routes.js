@@ -129,9 +129,12 @@ router.get("/export/csv", async (req, res) => {
 
 // --- Admin delete any application
 // DELETE /api/distributors/admin/:id (admin only)
-// DELETE /api/distributors/admin/:id
-router.delete("/admin/:id", async (req, res) => {
+router.delete("/admin/:id", authMiddleware, async (req, res) => {
   try {
+    if (!req.user || req.user.role !== "admin") {
+      return res.status(403).json({ success: false, message: "Forbidden - Admins only" });
+    }
+
     const distributor = await DistributorApplication.findByIdAndDelete(req.params.id);
 
     if (!distributor) {
@@ -140,6 +143,7 @@ router.delete("/admin/:id", async (req, res) => {
 
     res.json({ success: true, message: "Distributor application deleted successfully" });
   } catch (err) {
+    console.error("Admin delete error:", err);
     res.status(500).json({ success: false, message: "Failed to delete application" });
   }
 });
@@ -147,5 +151,6 @@ router.delete("/admin/:id", async (req, res) => {
 
 // ✅ Export at the very end
 export default router;
+
 
 
