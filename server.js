@@ -23,26 +23,22 @@ import distributorRoutes from "./routes/distributor-routes.js";
 dotenv.config();
 
 const app = express();
-
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
-const allowedOrigins = [
-  "http://localhost:5173",         // local dev
-  "https://axivibe-vojm.vercel.app" // your deployed frontend
-];
-
-// ✅ CORS middleware (only once)
+// ✅ CORS whitelist
 const allowedOrigins = [
   "http://localhost:5173",
   "https://axivibe-vojm.vercel.app"
 ];
 
+// ✅ CORS middleware
 app.use(
   cors({
     origin: (origin, callback) => {
-      console.log("CORS Origin:", origin); // debug
-      if (!origin || allowedOrigins.some(o => origin.startsWith(o))) {
+      console.log("CORS Origin:", origin);
+      // allow requests with no origin (like mobile apps, Postman)
+      if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
         console.error("Blocked by CORS:", origin);
@@ -50,21 +46,23 @@ app.use(
       }
     },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Expires", "Pragma"],
   })
 );
 
-// Stripe webhook needs raw body
+// Stripe webhook (raw body needed)
 app.use("/api/shop/order/webhook", bodyParser.raw({ type: "application/json" }));
 
 app.use(cookieParser());
 app.use(express.json());
 
-// ✅ Root route for health check
+// ✅ Health check route
 app.get("/", (req, res) => {
   res.json({ success: true, message: "Backend API is running 🚀" });
 });
 
-// Routes
+// ✅ Routes
 app.use("/api/auth", authRouter);
 app.use("/api/admin/products", adminProductsRouter);
 app.use("/api/admin/orders", adminOrderRouter);
@@ -80,12 +78,11 @@ app.use("/api/admin/brands", brandRoutes);
 app.use("/api/admin/categories", categoryRoutes);
 app.use("/api/distributors", distributorRoutes);
 
-// Connect MongoDB
+// ✅ Connect to MongoDB
 mongoose
-  .connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .connect(MONGO_URI)
   .then(() => console.log("✅ MongoDB connected"))
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
-app.listen(PORT, () =>
-  console.log(`🚀 Server is running on http://localhost:${PORT}`)
-);
+// ✅ Start server
+app.listen(PORT, () => console.log(`🚀 Server is running on http://localhost:${PORT}`));
