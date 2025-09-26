@@ -29,7 +29,8 @@ const MONGO_URI = process.env.MONGO_URI;
 // ✅ CORS whitelist
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://axivibe-vojm.vercel.app"
+  "https://axivibe-vojm.vercel.app",
+  "https://axivibe1.onrender.com"
 ];
 
 // ✅ CORS middleware
