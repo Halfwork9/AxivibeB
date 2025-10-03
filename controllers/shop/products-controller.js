@@ -113,3 +113,75 @@ export const addProduct = async (req, res) => {
     });
   }
 };
+
+// @desc    Fetch all filtered products
+// @route   GET /api/shop/products/get
+// @access  Public
+const getAllProducts = async (req, res) => {
+  try {
+    const { category = [], brand = [], sortBy = "price-lowtohigh" } = req.query;
+
+    let filters = {};
+    if (category.length) filters.categoryId = { $in: category.split(",") };
+    if (brand.length) filters.brandId = { $in: brand.split(",") };
+
+    let sort = {};
+    switch (sortBy) {
+      case "price-lowtohigh":
+        sort.price = 1;
+        break;
+      case "price-hightolow":
+        sort.price = -1;
+        break;
+      case "title-atoz":
+        sort.title = 1;
+        break;
+      case "title-ztoa":
+        sort.title = -1;
+        break;
+      default:
+        sort.price = 1;
+        break;
+    }
+
+    const products = await Product.find(filters)
+      .populate("categoryId", "name")
+      .populate("brandId", "name")
+      .sort(sort);
+
+    res.status(200).json({ success: true, data: products });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: "Some error occurred" });
+  }
+};
+
+// @desc    Fetch single product by ID
+// @route   GET /api/shop/product-details/:id
+// @access  Public
+const getProductById = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id)
+      .populate("categoryId", "name")
+      .populate("brandId", "name");
+    // NOTE: No need to populate reviews here as they are embedded
+
+    if (product) {
+      res.status(200).json({
+        success: true,
+        message: "Product details fetched successfully",
+        data: product,
+      });
+    } else {
+      res.status(404).json({ message: "Product not found" });
+    }
+  } catch (error) {
+    console.error("Error fetching product by ID:", error);
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+
+module.exports = {
+  getAllProducts,
+  getProductById,
+};
