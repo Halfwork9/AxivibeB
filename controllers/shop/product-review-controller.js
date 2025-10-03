@@ -1,11 +1,12 @@
 import Order from "../../models/Order.js";
-import Product from "../../models/Product.js";
 import ProductReview from "../../models/Review.js";
 
+// Add a product review (only if user purchased)
 export const addProductReview = async (req, res) => {
   try {
     const { productId, userId, userName, reviewMessage, reviewValue } = req.body;
 
+    // Check if user purchased the product
     const order = await Order.findOne({
       userId,
       "cartItems.productId": productId,
@@ -18,6 +19,7 @@ export const addProductReview = async (req, res) => {
       });
     }
 
+    // Check if review already exists
     const existingReview = await ProductReview.findOne({ productId, userId });
     if (existingReview) {
       return res.status(400).json({
@@ -26,6 +28,7 @@ export const addProductReview = async (req, res) => {
       });
     }
 
+    // Create and save review
     const newReview = new ProductReview({
       productId,
       userId,
@@ -36,13 +39,6 @@ export const addProductReview = async (req, res) => {
 
     await newReview.save();
 
-    const reviews = await ProductReview.find({ productId });
-    const totalReviewsLength = reviews.length;
-    const averageReview =
-      reviews.reduce((sum, r) => sum + r.reviewValue, 0) / totalReviewsLength;
-
-    await Product.findByIdAndUpdate(productId, { averageReview });
-
     res.status(201).json({ success: true, data: newReview });
   } catch (e) {
     console.error(e);
@@ -50,10 +46,11 @@ export const addProductReview = async (req, res) => {
   }
 };
 
+// Get all reviews for a product
 export const getProductReviews = async (req, res) => {
   try {
     const { productId } = req.params;
-    const reviews = await ProductReview.find({ productId });
+    const reviews = await ProductReview.find({ productId }).sort({ createdAt: -1 });
     res.status(200).json({ success: true, data: reviews });
   } catch (e) {
     console.error(e);
