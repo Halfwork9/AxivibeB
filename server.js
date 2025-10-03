@@ -19,7 +19,7 @@ import commonFeatureRouter from "./routes/common/feature-routes.js";
 import imageUploadRoutes from "./routes/admin/imageUploadRoutes.js";
 import categoryRoutes from "./routes/admin/category-routes.js";
 import distributorRoutes from "./routes/distributor-routes.js";
-const reviewRoutes = require('./routes/reviewRoutes');
+const reviewRoutes = require("./routes/reviewRoutes");
 dotenv.config();
 
 const app = express();
@@ -79,7 +79,7 @@ app.use("/api/common/feature", commonFeatureRouter);
 app.use("/api/admin/brands", brandRoutes);
 app.use("/api/admin/categories", categoryRoutes);
 app.use("/api/distributors", distributorRoutes);
-app.use('/api/shop/products', reviewRoutes);
+app.use("/api/shop/products", reviewRoutes);
 // ✅ Connect to MongoDB
 mongoose
   .connect(MONGO_URI)
