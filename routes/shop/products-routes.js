@@ -1,12 +1,13 @@
+// src/routes/shop/products.js
 import express from "express";
 import {
-  getFilteredProducts,
-  getProductDetails,
+  getAllProducts,
+  getProductById, // <-- your function name
 } from "../../controllers/shop/products-controller.js";
 
 const router = express.Router();
 
-router.get("/get", getFilteredProducts);
-router.get("/get/:id", getProductDetails);
+router.get("/products/get", getAllProducts);
+router.get("/product-details/:id", getProductById); // <-- FIX: match frontend
 
 export default router;
