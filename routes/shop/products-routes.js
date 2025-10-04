@@ -1,13 +1,18 @@
-// src/routes/shop/products.js
 import express from "express";
 import {
-  getAllProducts,
-  getProductById, // <-- your function name
+  getFilteredProducts,
+  getProductDetails,
 } from "../../controllers/shop/products-controller.js";
 
 const router = express.Router();
 
-router.get("/products/get", getAllProducts);
-router.get("/product-details/:id", getProductById); // <-- FIX: match frontend
+// Public routes
+router.get("/get", getAllProducts);
+// ✅ FIX: The route now correctly listens for "/product-details/:id"
+router.get("/product-details/:id", getProductById);
 
-export default router;
+// Example of an admin-only route for adding products
+// router.post("/add", protect, admin, addProduct);
+
+
+module.exports = router;
