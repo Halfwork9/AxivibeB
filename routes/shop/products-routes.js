@@ -1,18 +1,12 @@
 import express from "express";
 import {
-   getAllProducts,
-  getProductById,
+  getFilteredProducts,
+  getProductDetails,
 } from "../../controllers/shop/products-controller.js";
 
 const router = express.Router();
 
-// Public routes
-router.get("/get", getAllProducts);
-// ✅ FIX: The route now correctly listens for "/product-details/:id"
-router.get("/product-details/:id", getProductById);
+router.get("/get", getFilteredProducts);
+router.get("/get/:id", getProductDetails);
 
-// Example of an admin-only route for adding products
-// router.post("/add", protect, admin, addProduct);
-
-
-module.exports = router;
+export default router;
