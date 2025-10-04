@@ -48,21 +48,23 @@ export const getAllProducts = async (req, res) => {
 export const getProductById = async (req, res) => {
   try {
     const { id } = req.params;
-    console.log("Fetching product with ID:", id);
-    const product = await Product.findById(id)
-      .populate("categoryId", "name")
-      .populate("brandId", "name")
-      .populate("reviews.userId", "userName");
 
-    if (!product) {
-      console.warn("Product not found:", id);
-      return res.status(404).json({ success: false, message: "Product not found!" });
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid product ID" });
     }
 
-    res.status(200).json({ success: true, data: product });
-  } catch (e) {
-    console.error("Error in getProductById:", e);
-    res.status(500).json({ success: false, message: "Some error occurred" });
+    const product = await Product.findById(id)
+      .populate("categoryId", "name")
+      .populate("brandId", "name");
+
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    res.json(product);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
