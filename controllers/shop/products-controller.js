@@ -48,12 +48,14 @@ export const getAllProducts = async (req, res) => {
 export const getProductById = async (req, res) => {
   try {
     const { id } = req.params;
+    console.log("Fetching product with ID:", id);
     const product = await Product.findById(id)
       .populate("categoryId", "name")
       .populate("brandId", "name")
       .populate("reviews.userId", "userName");
 
     if (!product) {
+      console.warn("Product not found:", id);
       return res.status(404).json({ success: false, message: "Product not found!" });
     }
 
@@ -63,6 +65,7 @@ export const getProductById = async (req, res) => {
     res.status(500).json({ success: false, message: "Some error occurred" });
   }
 };
+
 
 
 // @desc    Add a new product
