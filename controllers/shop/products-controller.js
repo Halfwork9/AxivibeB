@@ -42,22 +42,19 @@ export const getAllProducts = async (req, res) => {
   }
 };
 
-// @desc    Fetch single product by ID
-// @route   GET /api/shop/product-details/:id
-// @access  Public
+// @desc Fetch single product by ID
+// @route GET /api/shop/product-details/:id
+// @access Public
 export const getProductById = async (req, res) => {
   try {
     const { id } = req.params;
     const product = await Product.findById(id)
       .populate("categoryId", "name")
       .populate("brandId", "name")
-      // ✅ FIX: This line was missing. It fetches the user's name for each review.
       .populate("reviews.userId", "userName");
 
     if (!product) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Product not found!" });
+      return res.status(404).json({ success: false, message: "Product not found!" });
     }
 
     res.status(200).json({ success: true, data: product });
@@ -66,6 +63,7 @@ export const getProductById = async (req, res) => {
     res.status(500).json({ success: false, message: "Some error occurred" });
   }
 };
+
 
 // @desc    Add a new product
 // @route   POST /api/shop/products/add
