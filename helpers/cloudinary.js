@@ -25,4 +25,4 @@ export const imageUploadUtil = async (filePath) => {
   };
 };
 
-export { upload };
+
