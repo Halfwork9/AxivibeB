@@ -1,4 +1,3 @@
-// controllers/uploadController.js
 import { cloudinary } from "../helpers/cloudinary.js";
 
 export const uploadImage = async (req, res) => {
@@ -10,10 +9,8 @@ export const uploadImage = async (req, res) => {
       });
     }
 
-    // Convert the file buffer to a base64 string
     const fileBase64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
 
-    // Upload directly from memory to Cloudinary
     const result = await cloudinary.v2.uploader.upload(fileBase64, {
       folder: "mern-ecom",
     });
