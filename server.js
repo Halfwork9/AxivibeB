@@ -5,6 +5,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import bodyParser from "body-parser";
 
+// Route imports - all using the correct ESM 'import' syntax
 import brandRoutes from "./routes/admin/brand-routes.js";
 import authRouter from "./routes/auth/auth-routes.js";
 import adminProductsRouter from "./routes/admin/products-routes.js";
@@ -19,15 +20,14 @@ import commonFeatureRouter from "./routes/common/feature-routes.js";
 import imageUploadRoutes from "./routes/admin/imageUploadRoutes.js";
 import categoryRoutes from "./routes/admin/category-routes.js";
 import distributorRoutes from "./routes/distributor-routes.js";
-const reviewRoutes = require("./routes/reviewRoutes");
-const uploadRoutes = require("./routes/uploadRoutes");
+
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
-// ✅ CORS whitelist
+// CORS whitelist
 const allowedOrigins = [
   "http://localhost:5173",
   "https://axivibe.vercel.app",
@@ -35,12 +35,10 @@ const allowedOrigins = [
   "https://axivibe1.onrender.com"
 ];
 
-// ✅ CORS middleware
+// CORS middleware
 app.use(
   cors({
     origin: (origin, callback) => {
-      console.log("CORS Origin:", origin);
-      // allow requests with no origin (like mobile apps, Postman)
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -60,12 +58,12 @@ app.use("/api/shop/order/webhook", bodyParser.raw({ type: "application/json" }))
 app.use(cookieParser());
 app.use(express.json());
 
-// ✅ Health check route
+// Health check route
 app.get("/", (req, res) => {
   res.json({ success: true, message: "Backend API is running 🚀" });
 });
 
-// ✅ Routes
+// Routes
 app.use("/api/auth", authRouter);
 app.use("/api/admin/products", adminProductsRouter);
 app.use("/api/admin/orders", adminOrderRouter);
@@ -80,13 +78,13 @@ app.use("/api/common/feature", commonFeatureRouter);
 app.use("/api/admin/brands", brandRoutes);
 app.use("/api/admin/categories", categoryRoutes);
 app.use("/api/distributors", distributorRoutes);
-app.use("/api/shop/products", reviewRoutes);
-app.use("/api", uploadRoutes);
-// ✅ Connect to MongoDB
+
+// Connect to MongoDB
 mongoose
   .connect(MONGO_URI)
   .then(() => console.log("✅ MongoDB connected"))
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
-// ✅ Start server
+// Start server
 app.listen(PORT, () => console.log(`🚀 Server is running on http://localhost:${PORT}`));
+
