@@ -4,7 +4,6 @@ import { uploadImage } from "../controllers/uploadController.js";
 
 const router = express.Router();
 
-// ✅ key must match frontend: "file"
-router.post("/upload-image", upload.single("file"), uploadImage);
+router.post("/upload-image", upload.single("image"), uploadImage);
 
 export default router;
