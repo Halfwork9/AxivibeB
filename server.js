@@ -20,6 +20,7 @@ import imageUploadRoutes from "./routes/admin/imageUploadRoutes.js";
 import categoryRoutes from "./routes/admin/category-routes.js";
 import distributorRoutes from "./routes/distributor-routes.js";
 const reviewRoutes = require("./routes/reviewRoutes");
+const uploadRoutes = require("./routes/uploadRoutes");
 dotenv.config();
 
 const app = express();
@@ -80,6 +81,7 @@ app.use("/api/admin/brands", brandRoutes);
 app.use("/api/admin/categories", categoryRoutes);
 app.use("/api/distributors", distributorRoutes);
 app.use("/api/shop/products", reviewRoutes);
+app.use("/api", uploadRoutes);
 // ✅ Connect to MongoDB
 mongoose
   .connect(MONGO_URI)
