@@ -1,15 +1,21 @@
-const cloudinary = require("../config/cloudinary");
+// controllers/uploadController.js
+import { cloudinary } from "../helpers/cloudinary.js";
 
-const uploadImage = async (req, res) => {
+export const uploadImage = async (req, res) => {
   try {
-    // req.file is created by multer. If it's not here, the upload failed.
     if (!req.file) {
-      return res.status(400).json({ success: false, message: "No file uploaded." });
+      return res.status(400).json({
+        success: false,
+        message: "No file uploaded.",
+      });
     }
 
-    // The file is uploaded to Cloudinary
-    const result = await cloudinary.uploader.upload(req.file.path, {
-      folder: "mern-ecommerce", // Optional: specify a folder in Cloudinary
+    // Convert the file buffer to a base64 string
+    const fileBase64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+
+    // Upload directly from memory to Cloudinary
+    const result = await cloudinary.v2.uploader.upload(fileBase64, {
+      folder: "mern-ecom",
     });
 
     res.status(200).json({
@@ -29,6 +35,3 @@ const uploadImage = async (req, res) => {
     });
   }
 };
-
-module.exports = { uploadImage };
-
