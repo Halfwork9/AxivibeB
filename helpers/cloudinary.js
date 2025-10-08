@@ -11,7 +11,8 @@ cloudinary.v2.config({
 });
 
 const storage = multer.memoryStorage();
-const upload = multer({ storage });
+export const upload = multer({ storage });
+export { cloudinary };
 
 export const imageUploadUtil = async (filePath) => {
   const result = await cloudinary.v2.uploader.upload(filePath, {
