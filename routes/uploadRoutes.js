@@ -1,11 +1,11 @@
 // routes/uploadRoutes.js
 import express from "express";
-import upload from "../middlewares/multer.js"; // the multer config
+import { upload } from "../helpers/cloudinary.js";
 import { uploadImage } from "../controllers/uploadController.js";
 
 const router = express.Router();
 
-// Ensure the key matches what frontend sends
+// ✅ The key here must match frontend: FormData.append("my_file", file)
 router.post("/upload-image", upload.single("my_file"), uploadImage);
 
 export default router;
