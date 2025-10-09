@@ -38,7 +38,7 @@ const corsOptions = {
   credentials: true,
 };
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions)); // Enable pre-flight for all routes
+app.options("*", cors(corsOptions));
 
 // Middleware
 app.use("/api/shop/order/webhook", bodyParser.raw({ type: "application/json" }));
@@ -60,7 +60,7 @@ app.use("/api/shop/cart", shopCartRouter);
 app.use("/api/shop/address", shopAddressRouter);
 app.use("/api/shop/order", shopOrderRouter);
 app.use("/api/shop/search", shopSearchRouter);
-//  FIX: This line now correctly mounts the review routes under the /products path
+// ✅ FIX: This line correctly mounts the review routes under the /products path
 app.use("/api/shop/products", reviewRoutes);
 app.use("/api/common/feature", commonFeatureRouter);
 app.use("/api/admin/brands", brandRoutes);
