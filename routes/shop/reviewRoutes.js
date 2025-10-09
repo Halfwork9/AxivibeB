@@ -1,6 +1,6 @@
 import express from "express";
 import { addReview } from "../../controllers/shop/review-controller.js";
-import { authMiddleware } from "../../middleware/authMiddleware.js"; // Corrected middleware import path
+import { authMiddleware } from "../../controllers/auth/auth-controller.js"; // Corrected middleware import path
 
 const router = express.Router();
 
