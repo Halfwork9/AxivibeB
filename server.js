@@ -66,6 +66,7 @@ app.use("/api/common/feature", commonFeatureRouter);
 app.use("/api/admin/brands", brandRoutes);
 app.use("/api/admin/categories", categoryRoutes);
 app.use("/api/distributors", distributorRoutes);
+console.log("✅ Review routes mounted under /api/shop");
 
 // Connect to MongoDB and start server
 mongoose
