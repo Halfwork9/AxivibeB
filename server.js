@@ -60,7 +60,8 @@ app.use("/api/shop/cart", shopCartRouter);
 app.use("/api/shop/address", shopAddressRouter);
 app.use("/api/shop/order", shopOrderRouter);
 app.use("/api/shop/search", shopSearchRouter);
-app.use("/api/shop/products", reviewRoutes); // Handles /api/shop/products/:productId/reviews
+//  FIX: This line now correctly mounts the review routes under the /products path
+app.use("/api/shop/products", reviewRoutes);
 app.use("/api/common/feature", commonFeatureRouter);
 app.use("/api/admin/brands", brandRoutes);
 app.use("/api/admin/categories", categoryRoutes);
