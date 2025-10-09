@@ -4,7 +4,6 @@ import { authMiddleware } from "../../controllers/auth/auth-controller.js";
 
 const router = express.Router();
 
-// ✅ Correct route
 router.post("/products/:productId/reviews", authMiddleware, addReview);
 
 export default router;
