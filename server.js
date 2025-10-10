@@ -61,7 +61,7 @@ app.use("/api/shop/address", shopAddressRouter);
 app.use("/api/shop/order", shopOrderRouter);
 app.use("/api/shop/search", shopSearchRouter);
 // ✅ FIX: This line correctly mounts the review routes under the /products path
-app.use("/api/shop", reviewRoutes); // ✅ This line fixes the 404
+app.use("/api/shop/products", reviewRoutes); // ✅ This line fixes the 404
 app.use("/api/common/feature", commonFeatureRouter);
 app.use("/api/admin/brands", brandRoutes);
 app.use("/api/admin/categories", categoryRoutes);
