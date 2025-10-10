@@ -16,6 +16,7 @@ export const handleImageUpload = async (req, res) => {
 };
 
 // ADD product
+// ADD product
 export const addProduct = async (req, res) => {
   try {
     const {
@@ -28,16 +29,18 @@ export const addProduct = async (req, res) => {
       salePrice,
       totalStock,
       averageReview,
+      isOnSale, // ✅ added
     } = req.body;
 
     const newProduct = new Product({
       image,
       title,
       description,
-      categoryId,  // ✅ correct field
-      brandId,     // ✅ correct field
+      categoryId,
+      brandId,
       price,
-      salePrice,
+      salePrice: isOnSale ? salePrice : 0, // ✅ apply only if true
+      isOnSale: Boolean(isOnSale),
       totalStock,
       averageReview,
     });
@@ -91,7 +94,14 @@ export const editProduct = async (req, res) => {
     const { id } = req.params;
     const updateData = req.body;
 
-    const product = await Product.findByIdAndUpdate(id, updateData, { new: true })
+    // ✅ Handle sale toggle logic
+    if (!updateData.isOnSale) {
+      updateData.salePrice = 0;
+    }
+
+    const product = await Product.findByIdAndUpdate(id, updateData, {
+      new: true,
+    })
       .populate("categoryId", "name")
       .populate("brandId", "name");
 
@@ -105,7 +115,6 @@ export const editProduct = async (req, res) => {
     res.status(500).json({ success: false, message: "Error occurred" });
   }
 };
-
 // DELETE product
 export const deleteProduct = async (req, res) => {
   try {
