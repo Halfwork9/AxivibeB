@@ -10,12 +10,11 @@ import brandRoutes from "./routes/admin/brand-routes.js";
 import authRouter from "./routes/auth/auth-routes.js";
 import adminProductsRouter from "./routes/admin/products-routes.js";
 import adminOrderRouter from "./routes/admin/order-routes.js";
-import shopProductsRouter from "./routes/shop/products-routes.js";
+import shopProductsRouter from "./routes/shop/products-routes.js"; // This now includes review routes
 import shopCartRouter from "./routes/shop/cart-routes.js";
 import shopAddressRouter from "./routes/shop/address-routes.js";
 import shopOrderRouter from "./routes/shop/order-routes.js";
 import shopSearchRouter from "./routes/shop/search-routes.js";
-import reviewRoutes from "./routes/shop/reviewRoutes.js";
 import commonFeatureRouter from "./routes/common/feature-routes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 import categoryRoutes from "./routes/admin/category-routes.js";
@@ -55,18 +54,18 @@ app.use("/api/auth", authRouter);
 app.use("/api/admin/products", adminProductsRouter);
 app.use("/api/admin/orders", adminOrderRouter);
 app.use("/api/admin/upload", uploadRoutes);
-app.use("/api/shop/products", shopProductsRouter);
 app.use("/api/shop/cart", shopCartRouter);
 app.use("/api/shop/address", shopAddressRouter);
 app.use("/api/shop/order", shopOrderRouter);
 app.use("/api/shop/search", shopSearchRouter);
-// ✅ FIX: This line correctly mounts the review routes under the /products path
-app.use("/api/shop/products", reviewRoutes); // ✅ This line fixes the 404
 app.use("/api/common/feature", commonFeatureRouter);
 app.use("/api/admin/brands", brandRoutes);
 app.use("/api/admin/categories", categoryRoutes);
 app.use("/api/distributors", distributorRoutes);
-console.log("✅ Review routes mounted under /api/shop");
+
+// ✅ FIX: Use only one router for all product-related actions.
+app.use("/api/shop/products", shopProductsRouter);
+
 
 // Connect to MongoDB and start server
 mongoose
