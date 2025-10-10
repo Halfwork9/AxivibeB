@@ -13,9 +13,22 @@ const ProductSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
     },
-    price: Number,
-    salePrice: Number,
-    totalStock: Number,
+    price: {
+      type: Number,
+      required: true,
+    },
+    salePrice: {
+      type: Number,
+      default: 0,
+    },
+    isOnSale: {
+      type: Boolean,
+      default: false, // ✅ new field
+    },
+    totalStock: {
+      type: Number,
+      default: 0,
+    },
     averageReview: {
       type: Number,
       default: 0,
