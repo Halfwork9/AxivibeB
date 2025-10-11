@@ -56,13 +56,32 @@ export const addProduct = async (req, res) => {
 // FETCH all products
 export const fetchAllProducts = async (req, res) => {
   try {
-    const listOfProducts = await Product.find({})
-      .populate("categoryId", "name")
-      .populate("brandId", "name");
+    const { categoryId, brandId, isOnSale, page = 1, limit = 20 } = req.query;
+    const filter = {};
 
-    res.status(200).json({ success: true, data: listOfProducts });
-  } catch (e) {
-    console.error(e);
+    if (categoryId) filter.categoryId = categoryId;
+    if (brandId) filter.brandId = brandId;
+    if (isOnSale !== undefined) filter.isOnSale = isOnSale === "true";
+
+    const products = await Product.find(filter)
+      .populate("categoryId", "name")
+      .populate("brandId", "name")
+      .skip((page - 1) * limit)
+      .limit(Number(limit));
+
+    const total = await Product.countDocuments(filter);
+
+    res.json({
+      success: true,
+      data: products,
+      pagination: {
+        total,
+        currentPage: Number(page),
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ success: false, message: "Error occurred" });
   }
 };
