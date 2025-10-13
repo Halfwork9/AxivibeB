@@ -4,9 +4,11 @@ import {
   createBrand,
   deleteBrand,
   getAllBrands,
-  editBrand, // Ensure editBrand is imported
+  editBrand,
 } from "../../controllers/admin/brand-controller.js";
-import { authMiddleware, adminMiddleware } from "../../middleware/authMiddleware.js";
+
+// ✅ FIX: Corrected the import path for the authentication middleware.
+import { authMiddleware, adminMiddleware } from "../../controllers/auth/auth-controller.js";
 
 const router = express.Router();
 
@@ -25,10 +27,8 @@ router.post("/", authMiddleware, adminMiddleware, upload.single("logo"), createB
 // DELETE a brand (Admin only)
 router.delete("/:id", authMiddleware, adminMiddleware, deleteBrand);
 
-// ✅ FIX: The PUT route now includes `upload.single("logo")` to handle file uploads
 // PUT (edit) a brand (Admin only)
 router.put("/:id", authMiddleware, adminMiddleware, upload.single("logo"), editBrand);
-
 
 export default router;
 
