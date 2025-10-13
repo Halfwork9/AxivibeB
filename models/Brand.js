@@ -4,6 +4,7 @@ const brandSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, unique: true },
     icon: { type: String, default: "" },
+    logo: { type: String, default: "" }, // ✅ Add logo URL
   },
   { timestamps: true }
 );
