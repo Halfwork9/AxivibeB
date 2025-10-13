@@ -7,30 +7,35 @@ export const createBrand = async (req, res) => {
     const { name, icon } = req.body;
     let logoUrl = "";
 
-    // Handle file upload if exists
+    // ✅ upload logo if file exists
     if (req.file) {
-      const b64 = Buffer.from(req.file.buffer).toString("base64");
-      const url = "data:" + req.file.mimetype + ";base64," + b64;
-      const result = await imageUploadUtil(url);
-      logoUrl = result?.secure_url || "";
+      const base64Image = Buffer.from(req.file.buffer).toString("base64");
+      const imageData = `data:${req.file.mimetype};base64,${base64Image}`;
+      const uploadResponse = await imageUploadUtil(imageData);
+      logoUrl = uploadResponse?.secure_url || "";
     }
 
-    const brandExists = await Brand.findOne({ name });
-    if (brandExists) {
+    const existing = await Brand.findOne({ name });
+    if (existing)
       return res
         .status(400)
         .json({ success: false, message: "Brand already exists" });
-    }
 
     const brand = new Brand({ name, icon, logo: logoUrl });
     await brand.save();
 
-    res.status(201).json({ success: true, message: "Brand created", data: brand });
+    res.status(201).json({
+      success: true,
+      message: "Brand created successfully",
+      data: brand, // ✅ returning full brand with logo
+    });
   } catch (error) {
-    console.error(error);
+    console.error("Create brand error:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+
 
 // ✅ Get All Brands
 export const getAllBrands = async (req, res) => {
@@ -48,21 +53,30 @@ export const editBrand = async (req, res) => {
   try {
     const { id } = req.params;
     const { name, icon } = req.body;
-    let updateData = { name, icon };
+    const updateData = { name, icon };
 
+    // ✅ upload logo if new one provided
     if (req.file) {
-      const b64 = Buffer.from(req.file.buffer).toString("base64");
-      const url = "data:" + req.file.mimetype + ";base64," + b64;
-      const result = await imageUploadUtil(url);
-      updateData.logo = result?.secure_url || "";
+      const base64Image = Buffer.from(req.file.buffer).toString("base64");
+      const imageData = `data:${req.file.mimetype};base64,${base64Image}`;
+      const uploadResponse = await imageUploadUtil(imageData);
+      updateData.logo = uploadResponse?.secure_url || "";
     }
 
-    const updated = await Brand.findByIdAndUpdate(id, updateData, { new: true });
-    if (!updated) return res.status(404).json({ success: false, message: "Brand not found" });
+    const updatedBrand = await Brand.findByIdAndUpdate(id, updateData, {
+      new: true,
+    });
 
-    res.status(200).json({ success: true, message: "Brand updated", data: updated });
+    if (!updatedBrand)
+      return res
+        .status(404)
+        .json({ success: false, message: "Brand not found" });
+
+    res
+      .status(200)
+      .json({ success: true, message: "Brand updated", data: updatedBrand });
   } catch (error) {
-    console.error(error);
+    console.error("Edit brand error:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
@@ -83,3 +97,4 @@ export const deleteBrand = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
