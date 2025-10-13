@@ -2,20 +2,16 @@ import Brand from "../../models/Brand.js";
 import { imageUploadUtil } from "../../helpers/cloudinary.js";
 
 // ✅ Create Brand
-import Brand from "../../models/Brand.js";
-import { imageUploadUtil } from "../../helpers/cloudinary.js";
-
 export const createBrand = async (req, res) => {
   try {
     const { name, icon } = req.body;
     let logoUrl = "";
 
-    // ✅ Upload logo to Cloudinary if present
     if (req.file) {
       const base64 = Buffer.from(req.file.buffer).toString("base64");
-      const url = "data:" + req.file.mimetype + ";base64," + base64;
-      const uploadResult = await imageUploadUtil(url);
-      logoUrl = uploadResult?.secure_url || uploadResult?.url || "";
+      const dataUrl = "data:" + req.file.mimetype + ";base64," + base64;
+      const uploadRes = await imageUploadUtil(dataUrl);
+      logoUrl = uploadRes?.secure_url || uploadRes?.url || "";
     }
 
     const brand = new Brand({ name, icon, logo: logoUrl });
@@ -23,11 +19,10 @@ export const createBrand = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: "Brand created successfully",
-      data: brand, // includes logo URL
+      data: brand,
     });
-  } catch (error) {
-    console.error("Error creating brand:", error);
+  } catch (err) {
+    console.error("Brand upload error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
@@ -91,5 +86,6 @@ export const deleteBrand = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
 
 
