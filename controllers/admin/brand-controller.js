@@ -1,20 +1,19 @@
 import Brand from "../../models/Brand.js";
 import { v2 as cloudinary } from "cloudinary";
 
-// ✅ Configure Cloudinary
+// Ensure Cloudinary is configured (it should be in a separate config file, but here for completeness)
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// ✅ Create Brand
+// Create Brand
 export const createBrand = async (req, res) => {
   try {
     const { name, icon } = req.body;
     let logoUrl = "";
 
-    // If a file was uploaded, upload it to Cloudinary
     if (req.file) {
       const result = await cloudinary.uploader.upload(req.file.path, {
         folder: "brands",
@@ -32,7 +31,7 @@ export const createBrand = async (req, res) => {
     const brand = new Brand({
       name,
       icon,
-      logo: logoUrl, // ✅ Store the image URL
+      logo: logoUrl,
     });
 
     await brand.save();
@@ -43,52 +42,45 @@ export const createBrand = async (req, res) => {
   }
 };
 
-// ✅ Get All Brands
+// Get All Brands
 export const getAllBrands = async (req, res) => {
   try {
     const brands = await Brand.find();
     res.status(200).json({ success: true, data: brands });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
 
-// ✅ Edit Brand
+// ✅ EDIT BRAND (Updated)
 export const editBrand = async (req, res) => {
   try {
     const { id } = req.params;
     const { name, icon } = req.body;
     const updateData = { name, icon };
 
-    // ✅ upload logo if new one provided
+    // If a new logo is uploaded, upload it to Cloudinary
     if (req.file) {
-      const base64Image = Buffer.from(req.file.buffer).toString("base64");
-      const imageData = `data:${req.file.mimetype};base64,${base64Image}`;
-      const uploadResponse = await imageUploadUtil(imageData);
-      updateData.logo = uploadResponse?.secure_url || "";
+       const result = await cloudinary.uploader.upload(req.file.path, {
+        folder: "brands",
+      });
+      updateData.logo = result.secure_url;
     }
 
-    const updatedBrand = await Brand.findByIdAndUpdate(id, updateData, {
-      new: true,
-    });
+    const updatedBrand = await Brand.findByIdAndUpdate(id, updateData, { new: true });
 
     if (!updatedBrand)
-      return res
-        .status(404)
-        .json({ success: false, message: "Brand not found" });
+      return res.status(404).json({ success: false, message: "Brand not found" });
 
-    res
-      .status(200)
-      .json({ success: true, message: "Brand updated", data: updatedBrand });
+    res.status(200).json({ success: true, message: "Brand updated", data: updatedBrand });
   } catch (error) {
     console.error("Edit brand error:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-// ✅ Delete Brand
+// Delete Brand
 export const deleteBrand = async (req, res) => {
   try {
     const { id } = req.params;
@@ -100,12 +92,6 @@ export const deleteBrand = async (req, res) => {
 
     res.status(200).json({ success: true, message: "Brand deleted successfully" });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
-
-
-
-
-
