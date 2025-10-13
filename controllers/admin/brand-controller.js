@@ -1,5 +1,12 @@
 import Brand from "../../models/Brand.js";
-import { imageUploadUtil } from "../../helpers/cloudinary.js";
+import { v2 as cloudinary } from "cloudinary";
+
+// ✅ Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 // ✅ Create Brand
 export const createBrand = async (req, res) => {
@@ -7,34 +14,42 @@ export const createBrand = async (req, res) => {
     const { name, icon } = req.body;
     let logoUrl = "";
 
-    // ✅ Upload image if provided
+    // If a file was uploaded, upload it to Cloudinary
     if (req.file) {
-      const base64 = Buffer.from(req.file.buffer).toString("base64");
-      const dataUrl = `data:${req.file.mimetype};base64,${base64}`;
-      const uploadRes = await imageUploadUtil(dataUrl);
-      logoUrl = uploadRes?.secure_url || uploadRes?.url || "";
+      const result = await cloudinary.uploader.upload(req.file.path, {
+        folder: "brands",
+      });
+      logoUrl = result.secure_url;
     }
 
     const brandExists = await Brand.findOne({ name });
     if (brandExists) {
-      return res.status(400).json({ success: false, message: "Brand already exists" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Brand already exists" });
     }
 
-    const brand = new Brand({ name, icon, logo: logoUrl });
-    await brand.save();
+    const brand = new Brand({
+      name,
+      icon,
+      logo: logoUrl, // ✅ Store the image URL
+    });
 
-    res.status(201).json({ success: true, data: brand });
+    await brand.save();
+    res.status(201).json({ success: true, message: "Brand created", data: brand });
   } catch (error) {
-    console.error("Create Brand Error:", error);
+    console.error("Brand creation error:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
+// ✅ Get All Brands
 export const getAllBrands = async (req, res) => {
   try {
-    const brands = await Brand.find({});
+    const brands = await Brand.find();
     res.status(200).json({ success: true, data: brands });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
@@ -89,6 +104,7 @@ export const deleteBrand = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
 
 
 
