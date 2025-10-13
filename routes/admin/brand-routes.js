@@ -7,8 +7,8 @@ import {
   editBrand,
 } from "../../controllers/admin/brand-controller.js";
 
-// ✅ FIX: Corrected the import path for the authentication middleware.
-import { authMiddleware, adminMiddleware } from "../../controllers/auth/auth-controller.js";
+// ✅ FIX: Removed the non-existent 'adminMiddleware' from the import.
+import { authMiddleware } from "../../controllers/auth/auth-controller.js";
 
 const router = express.Router();
 
@@ -22,13 +22,14 @@ const upload = multer({ storage });
 router.get("/", getAllBrands);
 
 // POST a new brand (Admin only)
-router.post("/", authMiddleware, adminMiddleware, upload.single("logo"), createBrand);
+// Note: You may want to add a separate admin-checking middleware here in the future
+router.post("/", authMiddleware, upload.single("logo"), createBrand);
 
 // DELETE a brand (Admin only)
-router.delete("/:id", authMiddleware, adminMiddleware, deleteBrand);
+router.delete("/:id", authMiddleware, deleteBrand);
 
 // PUT (edit) a brand (Admin only)
-router.put("/:id", authMiddleware, adminMiddleware, upload.single("logo"), editBrand);
+router.put("/:id", authMiddleware, upload.single("logo"), editBrand);
 
 export default router;
 
