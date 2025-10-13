@@ -3,11 +3,9 @@ import multer from "multer";
 import { createBrand, deleteBrand, getAllBrands } from "../../controllers/admin/brand-controller.js";
 
 const router = express.Router();
-const storage = multer.memoryStorage();
-const upload = multer({ storage });
+const upload = multer({ storage: multer.memoryStorage() }); // ✅ Use memory upload for Cloudinary
 
-// ✅ Field name MUST be "logo"
-router.post("/", upload.single("logo"), createBrand);
+router.post("/", upload.single("logo"), createBrand); // ✅ Handles logo upload
 router.get("/", getAllBrands);
 router.delete("/:id", deleteBrand);
 
