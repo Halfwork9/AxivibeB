@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 const ProductSchema = new mongoose.Schema(
   {
     // ✅ FIX: 'image' is now 'images' and stores multiple URLs
-    images: {
+    image: {
       type: [String],
       required: true,
     },
