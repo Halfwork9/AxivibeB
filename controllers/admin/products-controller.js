@@ -17,10 +17,11 @@ export const handleImageUpload = async (req, res) => {
 
 // ADD product
 // ADD product
+// ADD a new product
 export const addProduct = async (req, res) => {
   try {
     const {
-      image,
+      images, // ✅ Expect an array of image URLs
       title,
       description,
       categoryId,
@@ -28,28 +29,34 @@ export const addProduct = async (req, res) => {
       price,
       salePrice,
       totalStock,
-      averageReview,
-      isOnSale, // ✅ added
+      isOnSale,
     } = req.body;
 
+    // Validate that at least one image URL has been provided
+    if (!images || !Array.isArray(images) || images.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one product image is required.",
+      });
+    }
+
     const newProduct = new Product({
-      image,
+      images, // Save the array of images
       title,
       description,
       categoryId,
       brandId,
-      price,
-      salePrice: isOnSale ? salePrice : 0, // ✅ apply only if true
+      price: Number(price),
+      salePrice: isOnSale ? Number(salePrice) : 0,
       isOnSale: Boolean(isOnSale),
-      totalStock,
-      averageReview,
+      totalStock: Number(totalStock),
     });
 
     await newProduct.save();
-    res.status(201).json({ success: true, data: newProduct });
+    res.status(201).json({ success: true, message: "Product added successfully.", data: newProduct });
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ success: false, message: "Error occurred" });
+    console.error("Add product error:", e);
+    res.status(500).json({ success: false, message: "Error occurred while adding product." });
   }
 };
 
@@ -107,31 +114,37 @@ export const getProductDetails = async (req, res) => {
 
 
 
-// EDIT product
+// EDIT an existing product
 export const editProduct = async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = req.body;
 
-    // ✅ Handle sale toggle logic
-    if (!updateData.isOnSale) {
+    // Validate that at least one image URL is present in the update
+    if (!updateData.images || !Array.isArray(updateData.images) || updateData.images.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one product image is required.",
+      });
+    }
+
+    // Handle the logic for toggling 'On Sale' status
+    if (updateData.isOnSale === false) {
       updateData.salePrice = 0;
     }
 
     const product = await Product.findByIdAndUpdate(id, updateData, {
       new: true,
-    })
-      .populate("categoryId", "name")
-      .populate("brandId", "name");
+    });
 
     if (!product) {
-      return res.status(404).json({ success: false, message: "Product not found" });
+      return res.status(404).json({ success: false, message: "Product not found." });
     }
 
-    res.status(200).json({ success: true, data: product });
+    res.status(200).json({ success: true, message: "Product updated successfully.", data: product });
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ success: false, message: "Error occurred" });
+    console.error("Edit product error:", e);
+    res.status(500).json({ success: false, message: "Error occurred while editing product." });
   }
 };
 // DELETE product
