@@ -1,28 +1,15 @@
-import cloudinary from "cloudinary";
-import multer from "multer";
+import { v2 as cloudinary } from "cloudinary";
 import dotenv from "dotenv";
 
+// Load environment variables
 dotenv.config();
 
-cloudinary.v2.config({
+// Configure the Cloudinary instance with your credentials
+cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const storage = multer.memoryStorage();
-export const upload = multer({ storage });
-export { cloudinary };
-
-export const imageUploadUtil = async (filePath) => {
-  const result = await cloudinary.v2.uploader.upload(filePath, {
-    folder: "mern-ecom",
-  });
-
-  return {
-    secure_url: result.secure_url,
-    public_id: result.public_id,
-  };
-};
-
-
+// Export the configured instance to be used throughout your backend
+export default cloudinary;
