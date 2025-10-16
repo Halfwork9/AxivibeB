@@ -2,8 +2,8 @@ import mongoose from "mongoose";
 
 const ProductSchema = new mongoose.Schema(
   {
-    // ✅ FIX: 'image' is now 'images' and stores multiple URLs
-    image: {
+    // ✅ Change 'image' (String) to 'images' (Array of Strings)
+    images: {
       type: [String],
       required: true,
     },
@@ -39,3 +39,4 @@ const ProductSchema = new mongoose.Schema(
 
 const Product = mongoose.model("Product", ProductSchema);
 export default Product;
+
