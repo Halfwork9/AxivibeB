@@ -1,32 +1,34 @@
-import { v2 as cloudinary } from "cloudinary";
+import cloudinary from "../helpers/cloudinary.js";
 
-export const uploadImage = async (req, res) => {
+// This single function will handle all multi-image uploads.
+export const handleMultipleImageUploads = async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ success: false, message: "No file uploaded." });
+    // 'req.files' will be an array of files provided by multer.
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ success: false, message: "No files were uploaded." });
     }
 
-    const b64 = Buffer.from(req.file.buffer).toString("base64");
-    const dataURI = `data:${req.file.mimetype};base64,${b64}`;
+    // Create an array of upload promises.
+    const uploadPromises = req.files.map((file) =>
+      cloudinary.uploader.upload(file.path, {
+        folder: "axivibe-products", // A dedicated folder in Cloudinary for product images.
+      })
+    );
 
-    const result = await cloudinary.uploader.upload(dataURI, {
-      folder: "mern-ecommerce",
-    });
+    // Wait for all image uploads to complete.
+    const results = await Promise.all(uploadPromises);
+    
+    // Extract the secure URLs from the results.
+    const imageUrls = results.map((result) => result.secure_url);
 
-    return res.status(200).json({
+    // Send back the array of URLs to the frontend.
+    res.status(200).json({
       success: true,
-      message: "Image uploaded successfully!",
-      result: {
-        secure_url: result.secure_url,
-        public_id: result.public_id,
-      },
+      message: "Images uploaded successfully.",
+      data: imageUrls,
     });
   } catch (error) {
-    console.error("Cloudinary Upload Error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error during image upload.",
-      error: error.message,
-    });
+    console.error("Multi-image upload error:", error);
+    res.status(500).json({ success: false, message: "Image upload failed." });
   }
 };
