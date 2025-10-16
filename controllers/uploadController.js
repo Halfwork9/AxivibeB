@@ -11,7 +11,7 @@ export const handleMultipleImageUploads = async (req, res) => {
     // Create an array of upload promises.
     const uploadPromises = req.files.map((file) =>
       cloudinary.uploader.upload(file.path, {
-        folder: "axivibe-products", // A dedicated folder in Cloudinary for product images.
+        folder: "mern-ecom", // A dedicated folder in Cloudinary for product images.
       })
     );
 
