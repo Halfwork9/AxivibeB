@@ -169,6 +169,33 @@ export const registerUser = async (req, res) => {
   }
 };
 
+// ✅ KEPT & IMPROVED: Your original login logic
+export const loginUser = async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+    
+    // Prevent Google-only users from logging in with a password
+    if (!user.password) {
+        return res.status(400).json({ success: false, message: "This account was created with Google. Please use Google Sign-In."});
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ success: false, message: "Incorrect password." });
+    }
+    
+    sendTokenResponse(res, user, "Logged in successfully.");
+  } catch (e) {
+    console.error("Login error:", e);
+    res.status(500).json({ success: false, message: "Server error." });
+  }
+};
+
 // LOGIN
 export const loginUser = async (req, res) => {
   const { email, password } = req.body;
