@@ -11,16 +11,21 @@ import {
 
 const router = express.Router();
 
+// Email/Password Authentication
 router.post("/register", registerUser);
 router.post("/login", loginUser);
 router.post("/logout", logoutUser);
-router.post("/google", googleLogin); // ✅ Google Sign-In
-router.post("/forgot-password", forgotPassword); // ✅ Forgot Password
-router.post("/reset-password/:token", resetPassword); // ✅ Reset Password
 
+//  Google Authentication
+router.post("/google-login", googleLogin);
+
+//  Password Recovery
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password/:token", resetPassword);
+
+// Auth Check
 router.get("/check-auth", authMiddleware, (req, res) => {
   res.status(200).json({ success: true, user: req.user });
 });
 
 export default router;
-
