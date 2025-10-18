@@ -1,7 +1,130 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../../models/User.js";
+import { OAuth2Client } from "google-auth-library";
+import transporter from "../../config/nodemailer.js";
 
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+// --- HELPER FUNCTION ---
+const sendTokenResponse = (res, user, message) => {
+  const token = jwt.sign(
+    {
+      id: user._id,
+      role: user.role,
+      email: user.email,
+      userName: user.userName,
+    },
+    process.env.JWT_SECRET || "CLIENT_SECRET_KEY",
+    { expiresIn: "1d" }
+  );
+
+  res
+    .cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "None",
+      maxAge: 24 * 60 * 60 * 1000,
+    })
+    .json({
+      success: true,
+      message,
+      user: {
+        email: user.email,
+        role: user.role,
+        id: user._id,
+        userName: user.userName,
+      },
+    });
+};
+
+// --- CONTROLLERS ---
+
+// ✅ NEW: Google Sign-In
+export const googleLogin = async (req, res) => {
+  const { token } = req.body;
+  try {
+    const ticket = await client.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const { name, email, sub, picture } = ticket.getPayload();
+
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      user = new User({
+        googleId: sub,
+        userName: name,
+        email: email,
+        avatar: picture,
+      });
+      await user.save();
+    }
+    
+    sendTokenResponse(res, user, "Google Sign-In successful.");
+  } catch (error) {
+    res.status(400).json({ success: false, message: "Google authentication failed." });
+  }
+};
+
+// ✅ NEW: Forgot Password
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "No user found with that email." });
+    }
+
+    const resetToken = crypto.randomBytes(20).toString('hex');
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
+    await user.save();
+
+    const resetUrl = `${process.env.FRONTEND_URL}/auth/reset-password/${resetToken}`;
+    const mailOptions = {
+      to: user.email,
+      from: `Axivibe Support <${process.env.EMAIL_USER}>`,
+      subject: "Password Reset Request",
+      html: `<p>You requested a password reset. Click the link below to set a new password:</p>
+             <p><a href="${resetUrl}">${resetUrl}</a></p>
+             <p>This link will expire in one hour.</p>`,
+    };
+
+    await transporter.sendMail(mailOptions);
+    res.status(200).json({ success: true, message: "Password reset email sent." });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error." });
+  }
+};
+
+// ✅ NEW: Reset Password
+export const resetPassword = async (req, res) => {
+    try {
+        const { token } = req.params;
+        const { password } = req.body;
+
+        const user = await User.findOne({
+            resetPasswordToken: token,
+            resetPasswordExpires: { $gt: Date.now() },
+        });
+
+        if (!user) {
+            return res.status(400).json({ success: false, message: "Password reset token is invalid or has expired." });
+        }
+
+        user.password = await bcrypt.hash(password, 12);
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpires = undefined;
+        await user.save();
+
+        res.status(200).json({ success: true, message: "Password has been successfully reset." });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Server error." });
+    }
+};
 // REGISTER
 export const registerUser = async (req, res) => {
   const { userName, email, password } = req.body;
