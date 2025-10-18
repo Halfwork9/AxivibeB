@@ -19,7 +19,14 @@ const UserSchema = new mongoose.Schema({
     type: String,
     default: "user",
   },
-});
+   googleId: { type: String },
+    avatar: { type: String },
+    // ✅ NEW: Fields for password reset
+    resetPasswordToken: { type: String },
+    resetPasswordExpires: { type: Date },
+  
+},  { timestamps: true }
+                                      );
 
 const User = mongoose.model("User", UserSchema);
 
