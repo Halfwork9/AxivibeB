@@ -31,6 +31,7 @@ const allowedOrigins = [
   "http://localhost:5173",
   "https://axivibe.vercel.app",
   "https://axivibe-vojm.vercel.app",
+  "https://axivibe1.onrender.com",
 ];
 const corsOptions = {
   origin: allowedOrigins,
