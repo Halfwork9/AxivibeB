@@ -33,6 +33,7 @@ const allowedOrigins = [
   "https://axivibe-vojm.vercel.app",
   "https://axivibe1.onrender.com",
   "https://axivibe.netlify.app",
+  "https://nikhilmamdekar.site",
 ];
 const corsOptions = {
   origin: allowedOrigins,
