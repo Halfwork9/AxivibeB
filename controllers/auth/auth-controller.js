@@ -154,11 +154,10 @@ export const forgotPassword = async (req, res) => {
 
     const resetUrl = `${process.env.FRONTEND_URL}/auth/reset-password/${resetToken}`;
 
-    // CAN-SPAM/CASL compliant footer with your domain
     const footer = `
       <div style="font-size: 12px; color: #777; margin-top: 20px; border-top: 1px solid #ddd; padding-top: 10px;">
         <p>This email was sent by Axivibe. To stop receiving these emails, <a href="${process.env.FRONTEND_URL}/unsubscribe">unsubscribe</a>.</p>
-        <p>Axivibe<br>123 Example Street<br>City, State, ZIP<br>Country</p>  <!-- Update with real address -->
+        <p>Axivibe<br>123 Example Street<br>City, State, ZIP<br>Country</p>
         <p>Contact us at <a href="mailto:support@nikhilmamdekar.site">support@nikhilmamdekar.site</a></p>
       </div>
     `;
@@ -167,9 +166,10 @@ export const forgotPassword = async (req, res) => {
       to: user.email,
       from: {
         name: "Axivibe Support",
-        email: process.env.EMAIL_USER,  // Now support@nikhilmamdekar.site
+        email: process.env.EMAIL_USER || "halfworks9@gmail.com",
       },
       subject: "Reset Your Axivibe Password",
+      text: `Hi ${user.userName || "there"},\n\nWe received a request to reset your password. Click this link to set a new password (valid for 1 hour):\n${resetUrl}\n\nIf you didn’t request this, you can ignore this email.\n\nAxivibe\n123 Example Street, City, State, ZIP, Country\nContact: support@nikhilmamdekar.site`,
       html: `
         <div style="font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; border-radius: 8px;">
           <h2 style="color:#2c3e50;">Password Reset Request</h2>
@@ -193,10 +193,9 @@ export const forgotPassword = async (req, res) => {
     };
 
     await sgMail.send(msg);
-    res.status(200).json({ success: true, message: "Reset email sent successfully." });
+    res.status(200).json({ success: true, message: "Reset email sent successfully. Please check your inbox or spam/junk folder." });
   } catch (error) {
     console.error("Forgot Password Error:", error);
-    // Log response for debugging (e.g., error.response.body for SendGrid details)
     res.status(500).json({ success: false, message: "Something went wrong. Please try again." });
   }
 };
