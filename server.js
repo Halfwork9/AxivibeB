@@ -35,12 +35,20 @@ const allowedOrigins = [
   "https://axivibe.netlify.app",
   "https://nikhilmamdekar.site",
 ];
-const corsOptions = {
-  origin: allowedOrigins,
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.error("❌ Blocked by CORS:", origin);
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   credentials: true,
-};
-app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
+}));
 
 // Middleware
 app.use("/api/shop/order/webhook", bodyParser.raw({ type: "application/json" }));
