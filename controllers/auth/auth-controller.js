@@ -5,6 +5,8 @@ import User from "../../models/User.js";
 import { OAuth2Client } from "google-auth-library";
 import transporter from "../../config/nodemailer.js";
 
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // --- Helper: Send JWT as cookie ---
@@ -137,13 +139,13 @@ export const googleLogin = async (req, res) => {
 };
 
 // ✅ FORGOT PASSWORD
-// ✅ FORGOT PASSWORD (Send Reset Email)
 export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
     const user = await User.findOne({ email });
-    if (!user)
+    if (!user) {
       return res.status(404).json({ success: false, message: "No account found with that email." });
+    }
 
     const resetToken = crypto.randomBytes(32).toString("hex");
     user.resetPasswordToken = resetToken;
@@ -152,19 +154,18 @@ export const forgotPassword = async (req, res) => {
 
     const resetUrl = `${process.env.FRONTEND_URL}/auth/reset-password/${resetToken}`;
 
-    const mailOptions = {
-      from: `Axivibe Support <${process.env.EMAIL_USER}>`,
+    // ✅ Define the email for SendGrid
+    const msg = {
       to: user.email,
+      from: process.env.EMAIL_USER, // Your verified sender email
       subject: "Reset Your Axivibe Password",
       html: `
-        <div style="font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; border-radius: 8px;">
+        <div style="font-family: Arial, sans-serif; padding: 20px; border-radius: 8px;">
           <h2 style="color:#2c3e50;">Password Reset Request</h2>
           <p style="font-size:15px; color:#555;">
             Hi ${user.userName || "there"}, we received a request to reset your password.
           </p>
-          <p>
-            Click below to set a new password. This link is valid for <strong>1 hour</strong>.
-          </p>
+          <p>Click below to set a new password. This link is valid for <strong>1 hour</strong>.</p>
           <a href="${resetUrl}" 
              style="background-color:#1e90ff; color:#fff; padding:10px 20px; 
                     border-radius:5px; text-decoration:none; display:inline-block; margin-top:10px;">
@@ -177,7 +178,8 @@ export const forgotPassword = async (req, res) => {
       `,
     };
 
-    await transporter.sendMail(mailOptions);
+    // ✅ Send the email using SendGrid
+    await sgMail.send(msg);
 
     res.status(200).json({ success: true, message: "Reset email sent successfully." });
   } catch (error) {
