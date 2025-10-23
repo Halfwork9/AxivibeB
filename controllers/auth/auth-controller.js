@@ -3,7 +3,7 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import User from "../../models/User.js";
 import { OAuth2Client } from "google-auth-library";
-import transporter from "../../config/nodemailer.js";
+import sgMail from "../../config/sendgrid.js";  // Adjust path as needed
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
@@ -154,18 +154,31 @@ export const forgotPassword = async (req, res) => {
 
     const resetUrl = `${process.env.FRONTEND_URL}/auth/reset-password/${resetToken}`;
 
-    // ✅ Define the email for SendGrid
+    // CAN-SPAM/CASL compliant footer with your domain
+    const footer = `
+      <div style="font-size: 12px; color: #777; margin-top: 20px; border-top: 1px solid #ddd; padding-top: 10px;">
+        <p>This email was sent by Axivibe. To stop receiving these emails, <a href="${process.env.FRONTEND_URL}/unsubscribe">unsubscribe</a>.</p>
+        <p>Axivibe<br>123 Example Street<br>City, State, ZIP<br>Country</p>  <!-- Update with real address -->
+        <p>Contact us at <a href="mailto:support@nikhilmamdekar.site">support@nikhilmamdekar.site</a></p>
+      </div>
+    `;
+
     const msg = {
       to: user.email,
-      from: process.env.EMAIL_USER, // Your verified sender email
+      from: {
+        name: "Axivibe Support",
+        email: process.env.EMAIL_USER,  // Now support@nikhilmamdekar.site
+      },
       subject: "Reset Your Axivibe Password",
       html: `
-        <div style="font-family: Arial, sans-serif; padding: 20px; border-radius: 8px;">
+        <div style="font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; border-radius: 8px;">
           <h2 style="color:#2c3e50;">Password Reset Request</h2>
           <p style="font-size:15px; color:#555;">
             Hi ${user.userName || "there"}, we received a request to reset your password.
           </p>
-          <p>Click below to set a new password. This link is valid for <strong>1 hour</strong>.</p>
+          <p>
+            Click below to set a new password. This link is valid for <strong>1 hour</strong>.
+          </p>
           <a href="${resetUrl}" 
              style="background-color:#1e90ff; color:#fff; padding:10px 20px; 
                     border-radius:5px; text-decoration:none; display:inline-block; margin-top:10px;">
@@ -174,20 +187,19 @@ export const forgotPassword = async (req, res) => {
           <p style="font-size:13px; color:#777; margin-top:20px;">
             If you didn’t request this, you can safely ignore this email.
           </p>
+          ${footer}
         </div>
       `,
     };
 
-    // ✅ Send the email using SendGrid
     await sgMail.send(msg);
-
     res.status(200).json({ success: true, message: "Reset email sent successfully." });
   } catch (error) {
     console.error("Forgot Password Error:", error);
+    // Log response for debugging (e.g., error.response.body for SendGrid details)
     res.status(500).json({ success: false, message: "Something went wrong. Please try again." });
   }
 };
-
 
 // ✅ RESET PASSWORD
 export const resetPassword = async (req, res) => {
