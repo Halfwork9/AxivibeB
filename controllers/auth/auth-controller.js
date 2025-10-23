@@ -137,38 +137,55 @@ export const googleLogin = async (req, res) => {
 };
 
 // ✅ FORGOT PASSWORD
+// ✅ FORGOT PASSWORD (Send Reset Email)
 export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
     const user = await User.findOne({ email });
     if (!user)
-      return res
-        .status(404)
-        .json({ success: false, message: "User not found." });
+      return res.status(404).json({ success: false, message: "No account found with that email." });
 
-    const resetToken = crypto.randomBytes(20).toString("hex");
+    const resetToken = crypto.randomBytes(32).toString("hex");
     user.resetPasswordToken = resetToken;
-    user.resetPasswordExpires = Date.now() + 3600000;
+    user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
     await user.save();
 
     const resetUrl = `${process.env.FRONTEND_URL}/auth/reset-password/${resetToken}`;
-    await transporter.sendMail({
-      to: user.email,
-      from: `Axivibe Support <${process.env.EMAIL_USER}>`,
-      subject: "Password Reset Request",
-      html: `<p>You requested a password reset. Click below:</p>
-             <a href="${resetUrl}">${resetUrl}</a>`,
-    });
 
-    res.status(200).json({
-      success: true,
-      message: "Password reset email sent.",
-    });
-  } catch (err) {
-    console.error("Forgot password error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    const mailOptions = {
+      from: `Axivibe Support <${process.env.EMAIL_USER}>`,
+      to: user.email,
+      subject: "Reset Your Axivibe Password",
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; border-radius: 8px;">
+          <h2 style="color:#2c3e50;">Password Reset Request</h2>
+          <p style="font-size:15px; color:#555;">
+            Hi ${user.userName || "there"}, we received a request to reset your password.
+          </p>
+          <p>
+            Click below to set a new password. This link is valid for <strong>1 hour</strong>.
+          </p>
+          <a href="${resetUrl}" 
+             style="background-color:#1e90ff; color:#fff; padding:10px 20px; 
+                    border-radius:5px; text-decoration:none; display:inline-block; margin-top:10px;">
+            Reset Password
+          </a>
+          <p style="font-size:13px; color:#777; margin-top:20px;">
+            If you didn’t request this, you can safely ignore this email.
+          </p>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.status(200).json({ success: true, message: "Reset email sent successfully." });
+  } catch (error) {
+    console.error("Forgot Password Error:", error);
+    res.status(500).json({ success: false, message: "Something went wrong. Please try again." });
   }
 };
+
 
 // ✅ RESET PASSWORD
 export const resetPassword = async (req, res) => {
