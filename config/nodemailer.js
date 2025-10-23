@@ -3,17 +3,22 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-// This setup uses Gmail. For it to work, you MUST generate an "App Password"
-// from your Google Account security settings. Your regular password will not work.
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
   port: 587,
-  secure: false, // TLS
+  secure: false, // true for port 465
   auth: {
-    user: process.env.EMAIL_USER, // Your Gmail address from .env
-    pass: process.env.EMAIL_PASS, // Your Gmail App Password from .env
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
   },
 });
 
-export default transporter;
+transporter.verify((error, success) => {
+  if (error) {
+    console.error("❌ Email transporter error:", error);
+  } else {
+    console.log("✅ Email transporter ready to send messages!");
+  }
+});
 
+export default transporter;
