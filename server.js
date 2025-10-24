@@ -54,7 +54,12 @@ app.options("*", cors(corsOptions));
 // ✅ FIX: Add this middleware to allow Google's popup to communicate
 app.use((req, res, next) => {
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
-  res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+
+  // Allow embedding external images (Cloudinary)
+  if (req.path.startsWith("/api")) {
+    res.removeHeader("Cross-Origin-Embedder-Policy");
+  }
+
   next();
 });
 
