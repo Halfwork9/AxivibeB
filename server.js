@@ -55,6 +55,12 @@ app.use("/api/shop/order/webhook", bodyParser.raw({ type: "application/json" }))
 app.use(cookieParser());
 app.use(express.json());
 
+app.use((req, res, next) => {
+  res.removeHeader("Cross-Origin-Opener-Policy");
+  res.removeHeader("Cross-Origin-Embedder-Policy");
+  next();
+});
+
 // Health check
 app.get("/", (req, res) => {
   res.json({ success: true, message: "Backend API is running" });
