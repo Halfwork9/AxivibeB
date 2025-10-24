@@ -45,7 +45,8 @@ const allowedOrigins = [
   "https://axivibe1.onrender.com",
   "https://axivibe.netlify.app",
   "https://nikhilmamdekar.site",
-  "https://accounts.google.com", // needed for Google popup
+  "https://accounts.google.com",
+  "https://res.cloudinary.com",
 ];
 
 const corsOptions = {
