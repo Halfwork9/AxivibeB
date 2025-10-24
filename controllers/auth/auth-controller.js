@@ -111,6 +111,8 @@ export const loginUser = async (req, res) => {
 export const googleLogin = async (req, res) => {
   try {
     const { token } = req.body;
+    if (!token) return res.status(400).json({ success: false, message: "Missing Google token" });
+
     const ticket = await client.verifyIdToken({
       idToken: token,
       audience: process.env.GOOGLE_CLIENT_ID,
@@ -122,33 +124,44 @@ export const googleLogin = async (req, res) => {
     let user = await User.findOne({ email });
     if (!user) {
       user = await User.create({
-        name,
+        userName: name,
         email,
-        password: null,
+        password: null, // Prevent normal login
         google: true,
-        profilePicture: picture,
+        avatar: picture,
+        role: "user",
       });
     }
 
     const authToken = jwt.sign(
-      { id: user._id, email: user.email },
-      process.env.JWT_SECRET,
+      { id: user._id, email: user.email, role: user.role },
+      process.env.JWT_SECRET || "CLIENT_SECRET_KEY",
       { expiresIn: "7d" }
     );
 
-    res
-      .cookie("token", authToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "None",
-      })
-      .status(200)
-      .json({ success: true, message: "Google login successful" });
+    res.cookie("token", authToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "None",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Google login successful",
+      user: {
+        id: user._id,
+        email: user.email,
+        userName: user.userName,
+        role: user.role,
+      },
+    });
   } catch (err) {
     console.error("Google login error:", err.message);
     res.status(401).json({ success: false, message: "Google login failed" });
   }
 };
+
 
 // ✅ FORGOT PASSWORD
 export const forgotPassword = async (req, res) => {
