@@ -35,7 +35,9 @@ const allowedOrigins = [
   "https://axivibe.netlify.app",
   "https://nikhilmamdekar.site",
   "https://accounts.google.com",
+   "https://www.nikhilmamdekar.site",
 ];
+
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin || allowedOrigins.includes(origin)) {
@@ -47,22 +49,22 @@ const corsOptions = {
   },
   credentials: true,
 };
+
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 
-
-// ✅ FIX: Add this middleware to allow Google's popup to communicate
 app.use((req, res, next) => {
+  // Allow Google login popup
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
 
-  // Allow embedding external images (Cloudinary)
-  if (req.path.startsWith("/api")) {
-    res.removeHeader("Cross-Origin-Embedder-Policy");
-  }
+  // Prevent Chrome from isolating resources (this broke Cloudinary)
+  res.removeHeader("Cross-Origin-Embedder-Policy");
+
+  // Allow external images (Cloudinary, Google avatars, etc.)
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
 
   next();
 });
-
 // Other Middleware
 app.use("/api/shop/order/webhook", bodyParser.raw({ type: "application/json" }));
 app.use(cookieParser());
