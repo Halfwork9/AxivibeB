@@ -26,18 +26,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
-
-app.use((req, res, next) => {
-  // ✅ Only disable for image routes, not globally
-  if (req.path.includes("/api") || req.path.includes("/upload")) {
-    res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
-    res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
-  }
-  next();
-});
-
-
-// ✅ STEP 2: Proper CORS configuration
+// CORS configuration
 const allowedOrigins = [
   "http://localhost:5173",
   "https://axivibe.vercel.app",
@@ -46,15 +35,10 @@ const allowedOrigins = [
   "https://axivibe.netlify.app",
   "https://nikhilmamdekar.site",
   "https://accounts.google.com",
-  "https://res.cloudinary.com",
 ];
-
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like curl, mobile)
-    if (!origin) return callback(null, true);
-
-    if (allowedOrigins.includes(origin)) {
+    if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       console.warn("❌ Blocked by CORS:", origin);
@@ -62,24 +46,29 @@ const corsOptions = {
     }
   },
   credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
 };
-
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 
-// ✅ STEP 3: Middleware
+
+// ✅ FIX: Add this middleware to allow Google's popup to communicate
+app.use((req, res, next) => {
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+  res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+  next();
+});
+
+// Other Middleware
 app.use("/api/shop/order/webhook", bodyParser.raw({ type: "application/json" }));
 app.use(cookieParser());
 app.use(express.json());
 
-// ✅ STEP 4: Health check
+// Health check
 app.get("/", (req, res) => {
   res.json({ success: true, message: "Backend API is running 🚀" });
 });
 
-// ✅ STEP 5: Routes
+// API Routes
 app.use("/api/auth", authRouter);
 app.use("/api/admin/products", adminProductsRouter);
 app.use("/api/admin/orders", adminOrderRouter);
@@ -92,9 +81,9 @@ app.use("/api/common/feature", commonFeatureRouter);
 app.use("/api/admin/brands", brandRoutes);
 app.use("/api/admin/categories", categoryRoutes);
 app.use("/api/distributors", distributorRoutes);
-app.use("/api/shop/products", shopProductsRouter); // ✅ single route mount
+app.use("/api/shop/products", shopProductsRouter); // This handles both product and review routes
 
-// ✅ STEP 6: MongoDB + Server startup
+// Connect to MongoDB and start server
 mongoose
   .connect(MONGO_URI)
   .then(() => {
@@ -102,3 +91,4 @@ mongoose
     app.listen(PORT, () => console.log(`🚀 Server is running on port ${PORT}`));
   })
   .catch((err) => console.error("❌ MongoDB connection error:", err));
+
