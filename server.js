@@ -28,11 +28,14 @@ const MONGO_URI = process.env.MONGO_URI;
 
 
 app.use((req, res, next) => {
-  // ✅ Disable strict opener policies to allow Google OAuth popup
-  res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
-  res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
+  // ✅ Only disable for image routes, not globally
+  if (req.path.includes("/api") || req.path.includes("/upload")) {
+    res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
+    res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
+  }
   next();
 });
+
 
 // ✅ STEP 2: Proper CORS configuration
 const allowedOrigins = [
