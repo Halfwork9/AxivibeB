@@ -109,32 +109,44 @@ export const loginUser = async (req, res) => {
 
 // ✅ GOOGLE LOGIN
 export const googleLogin = async (req, res) => {
-  const { token } = req.body;
   try {
+    const { token } = req.body;
     const ticket = await client.verifyIdToken({
       idToken: token,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
-    const { name, email, sub, picture } = ticket.getPayload();
+
+    const payload = ticket.getPayload();
+    const { email, name, picture } = payload;
 
     let user = await User.findOne({ email });
-
     if (!user) {
-      user = new User({
-        googleId: sub,
-        userName: name,
+      user = await User.create({
+        name,
         email,
-        avatar: picture,
+        password: null,
+        google: true,
+        profilePicture: picture,
       });
-      await user.save();
     }
 
-    sendTokenResponse(res, user, "Google Sign-In successful.");
-  } catch (error) {
-    console.error("Google auth error:", error);
+    const authToken = jwt.sign(
+      { id: user._id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
     res
-      .status(400)
-      .json({ success: false, message: "Google authentication failed." });
+      .cookie("token", authToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "None",
+      })
+      .status(200)
+      .json({ success: true, message: "Google login successful" });
+  } catch (err) {
+    console.error("Google login error:", err.message);
+    res.status(401).json({ success: false, message: "Google login failed" });
   }
 };
 
