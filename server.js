@@ -28,10 +28,12 @@ const MONGO_URI = process.env.MONGO_URI;
 
 //  STEP 1: Remove COOP/COEP headers before anything else
 app.use((req, res, next) => {
-  res.removeHeader("Cross-Origin-Opener-Policy");
-  res.removeHeader("Cross-Origin-Embedder-Policy");
+  // ✅ Disable strict opener policies to allow Google OAuth popup
+  res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
+  res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
   next();
 });
+
 
 //  STEP 2: Proper CORS configuration
 app.use(
