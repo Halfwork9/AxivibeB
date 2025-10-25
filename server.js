@@ -26,6 +26,16 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
+app.set("trust proxy", 1);
+// ⚠️ MUST BE VERY TOP, before CORS or anything else
+app.use((req, res, next) => {
+  res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
+  res.removeHeader("Cross-Origin-Embedder-Policy");
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  next();
+});
+
+
 // ✅ Allowed frontend URLs
 const allowedOrigins = [
   "http://localhost:5173",
@@ -37,21 +47,6 @@ const allowedOrigins = [
 
 ];
 
-app.set("trust proxy", 1);
-
-/// ✅ FIX: allow Cloudinary & Google pop-ups
-app.use((req, res, next) => {
-  // Let Google OAuth popups communicate
-  res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
-
-  // Don’t enforce embedder isolation (allows external images)
-  res.removeHeader("Cross-Origin-Embedder-Policy");
-
-  // Explicitly permit images/scripts from other origins
-  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-
-  next();
-});
 
 // ✅ Then add CORS
 app.use(cors(corsOptions));
