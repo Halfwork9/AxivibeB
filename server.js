@@ -33,22 +33,24 @@ const allowedOrigins = [
   "https://axivibe-vojm.vercel.app",
   "https://nikhilmamdekar.site",
   "https://www.nikhilmamdekar.site",
+  " https://axivibe1.onrender.com",
+
 ];
+
 app.set("trust proxy", 1);
-// ✅ CORS setup
-const corsOptions = {
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.warn("❌ Blocked by CORS:", origin);
-      callback(new Error("Not allowed by CORS"));
-    }
-  },
-  credentials: true,
-};
+
+// ✅ FIX: allow popups globally before any middleware
+app.use((req, res, next) => {
+  res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
+  res.removeHeader("Cross-Origin-Embedder-Policy");
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  next();
+});
+
+// ✅ Then add CORS
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
+
 
 // ✅ COOP/COEP setup — allows Google popup + Cloudinary images
 app.use((req, res, next) => {
