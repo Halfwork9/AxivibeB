@@ -39,29 +39,23 @@ const allowedOrigins = [
 
 app.set("trust proxy", 1);
 
-// ✅ FIX: allow popups globally before any middleware
+/// ✅ FIX: allow Cloudinary & Google pop-ups
 app.use((req, res, next) => {
+  // Let Google OAuth popups communicate
   res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
+
+  // Don’t enforce embedder isolation (allows external images)
   res.removeHeader("Cross-Origin-Embedder-Policy");
+
+  // Explicitly permit images/scripts from other origins
   res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+
   next();
 });
 
 // ✅ Then add CORS
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
-
-
-// ✅ COOP/COEP setup — allows Google popup + Cloudinary images
-app.use((req, res, next) => {
-  // Allow popups (Google OAuth)
-  res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
-  // Remove embedder restriction
-  res.removeHeader("Cross-Origin-Embedder-Policy");
-  // Allow loading images/scripts from any origin
-  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-  next();
-});
 
 
 // ✅ Stripe webhook must come before express.json()
