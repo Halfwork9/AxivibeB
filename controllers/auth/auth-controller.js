@@ -133,30 +133,33 @@ export const googleLogin = async (req, res) => {
       });
     }
 
-    const authToken = jwt.sign(
-      { id: user._id, email: user.email, role: user.role },
-      process.env.JWT_SECRET || "CLIENT_SECRET_KEY",
-      { expiresIn: "7d" }
-    );
+ //  Sign your own JWT for the user
+const authToken = jwt.sign(
+  { id: user._id, email: user.email, role: user.role },
+  process.env.JWT_SECRET || "CLIENT_SECRET_KEY",
+  { expiresIn: "7d" }
+);
 
-    res.cookie("token", token, {
+//  Send your JWT (not the Google token!)
+res.cookie("token", authToken, {
   httpOnly: true,
-  secure: true, // HTTPS required on Render
-  sameSite: "None", // Required for cross-site cookies
-  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  secure: true,        // must be true for HTTPS (Render)
+  sameSite: "None",    // needed for cross-site cookies
+  maxAge: 7 * 24 * 60 * 60 * 1000,
 });
 
 
-    res.status(200).json({
-      success: true,
-      message: "Google login successful",
-      user: {
-        id: user._id,
-        email: user.email,
-        userName: user.userName,
-        role: user.role,
-      },
-    });
+   res.status(200).json({
+  success: true,
+  message: "Google login successful",
+  user: {
+    id: user._id,
+    email: user.email,
+    userName: user.userName,
+    role: user.role,
+  },
+});
+
   } catch (err) {
     console.error("Google login error:", err.message);
     res.status(401).json({ success: false, message: "Google login failed" });
