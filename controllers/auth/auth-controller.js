@@ -28,7 +28,7 @@ const sendTokenResponse = (res, user, message) => {
   sameSite: "None", // ✅ Needed for cross-domain cookies (Render + Vercel)
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
 });
-    .json({
+return   res.json({
       success: true,
       message,
       user: {
