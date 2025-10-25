@@ -41,7 +41,7 @@ const sendTokenResponse = (res, user, message) => {
     });
 };
 
-// ✅ REGISTER USER
+//  REGISTER USER
 export const registerUser = async (req, res) => {
   const { userName, email, password } = req.body;
   try {
@@ -76,7 +76,7 @@ export const registerUser = async (req, res) => {
   }
 };
 
-// ✅ EMAIL + PASSWORD LOGIN
+//  EMAIL + PASSWORD LOGIN
 export const loginUser = async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -107,11 +107,12 @@ export const loginUser = async (req, res) => {
   }
 };
 
-// ✅ GOOGLE LOGIN
+//  GOOGLE LOGIN
 export const googleLogin = async (req, res) => {
   try {
     const { token } = req.body;
-    if (!token) return res.status(400).json({ success: false, message: "Missing Google token" });
+    if (!token)
+      return res.status(400).json({ success: false, message: "Missing Google token" });
 
     const ticket = await client.verifyIdToken({
       idToken: token,
@@ -126,7 +127,7 @@ export const googleLogin = async (req, res) => {
       user = await User.create({
         userName: name,
         email,
-        password: null, // Prevent normal login
+        password: null,
         google: true,
         avatar: picture,
         role: "user",
@@ -163,7 +164,8 @@ export const googleLogin = async (req, res) => {
 };
 
 
-// ✅ FORGOT PASSWORD
+
+//  FORGOT PASSWORD
 export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
@@ -225,7 +227,7 @@ export const forgotPassword = async (req, res) => {
   }
 };
 
-// ✅ RESET PASSWORD
+//  RESET PASSWORD
 export const resetPassword = async (req, res) => {
   try {
     const { token } = req.params;
@@ -251,7 +253,7 @@ export const resetPassword = async (req, res) => {
   }
 };
 
-// ✅ LOGOUT
+//  LOGOUT
 export const logoutUser = (req, res) => {
   res
     .clearCookie("token", {
@@ -262,7 +264,7 @@ export const logoutUser = (req, res) => {
     .json({ success: true, message: "Logged out successfully!" });
 };
 
-// ✅ AUTH MIDDLEWARE
+//  AUTH MIDDLEWARE
 export const authMiddleware = (req, res, next) => {
   let token =
     req.cookies?.token ||
