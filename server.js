@@ -53,6 +53,7 @@ app.use(
     origin: [
       process.env.FRONTEND_URL || "https://axivibe-vojm.vercel.app",
       "http://localhost:5173",
+      "https://nikhilmamdekar.site",
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true,
