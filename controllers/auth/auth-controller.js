@@ -10,6 +10,7 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // --- Helper: Send JWT as cookie ---
+// --- Helper: Send JWT as cookie ---
 const sendTokenResponse = (res, user, message) => {
   const token = jwt.sign(
     {
@@ -19,25 +20,28 @@ const sendTokenResponse = (res, user, message) => {
       userName: user.userName,
     },
     process.env.JWT_SECRET || "CLIENT_SECRET_KEY",
-    { expiresIn: "1d" }
+    { expiresIn: "7d" }
   );
 
   res.cookie("token", token, {
-  httpOnly: true,
-  secure: true, // ✅ Always true if deployed on HTTPS
-  sameSite: "None", // ✅ Needed for cross-domain cookies (Render + Vercel)
-  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-});
-return   res.json({
-      success: true,
-      message,
-      user: {
-        id: user._id,
-        email: user.email,
-        userName: user.userName,
-        role: user.role,
-      },
-    });
+    httpOnly: true,
+    secure: true,            // ✅ Must be true for HTTPS
+    sameSite: "None",        // ✅ Required for cross-domain
+    domain: process.env.COOKIE_DOMAIN || ".onrender.com", // ✅ Allow cross-subdomain
+    path: "/",               // ✅ Always send to all routes
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  });
+
+  return res.json({
+    success: true,
+    message,
+    user: {
+      id: user._id,
+      email: user.email,
+      userName: user.userName,
+      role: user.role,
+    },
+  });
 };
 
 //  REGISTER USER
@@ -140,13 +144,15 @@ const authToken = jwt.sign(
   { expiresIn: "7d" }
 );
 
-//  Send your JWT (not the Google token!)
 res.cookie("token", authToken, {
   httpOnly: true,
-  secure: true,        // must be true for HTTPS (Render)
-  sameSite: "None",    // needed for cross-site cookies
+  secure: true,
+  sameSite: "None",
+  domain: process.env.COOKIE_DOMAIN || ".onrender.com",
+  path: "/",
   maxAge: 7 * 24 * 60 * 60 * 1000,
 });
+
 
 
    res.status(200).json({
