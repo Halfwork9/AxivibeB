@@ -139,12 +139,13 @@ export const googleLogin = async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    res.cookie("token", authToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "None",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie("token", token, {
+  httpOnly: true,
+  secure: true, // HTTPS required on Render
+  sameSite: "None", // Required for cross-site cookies
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+});
+
 
     res.status(200).json({
       success: true,
