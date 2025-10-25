@@ -44,26 +44,19 @@ const allowedOrigins = [
   "https://axivibe-vojm.vercel.app",
   "https://nikhilmamdekar.site",
   "https://www.nikhilmamdekar.site",
-  " https://axivibe1.onrender.com",
+  "https://axivibe1.onrender.com",
 
 ];
 
 app.use(
   cors({
-    origin: [
-      process.env.FRONTEND_URL || "https://axivibe-vojm.vercel.app",
-      "http://localhost:5173",
-      "https://nikhilmamdekar.site",
-    ],
+    origin: allowedOrigins,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true,
   })
 );
 
-//  Then add CORS
-app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
-
+app.options("*", cors());
 
 // ✅ Stripe webhook must come before express.json()
 app.use("/api/shop/order/webhook", bodyParser.raw({ type: "application/json" }));
