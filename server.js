@@ -41,21 +41,19 @@ const allowedOrigins = [
   "http://localhost:5173",
   "https://axivibe.vercel.app",
   "https://axivibe-vojm.vercel.app",
-  "https://axivibe1.onrender.com",
-  "https://axivibe.netlify.app",
   "https://nikhilmamdekar.site",
-  "https://accounts.google.com"
+  "https://www.nikhilmamdekar.site",
+  "https://axivibe1.onrender.com",
 ];
 
-const corsOptions = {
-  origin: allowedOrigins,
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-};
-
-app.use(cors(corsOptions));
-
+app.use(
+  cors({
+    origin: allowedOrigins,
+    credentials: true, // ✅ important for cookies
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 
 app.options("*", cors());
 
