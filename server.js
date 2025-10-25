@@ -29,9 +29,10 @@ const MONGO_URI = process.env.MONGO_URI;
 app.set("trust proxy", 1);
 // ⚠️ MUST BE VERY TOP, before CORS or anything else
 app.use((req, res, next) => {
-  res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
+  res.removeHeader("Cross-Origin-Opener-Policy");
   res.removeHeader("Cross-Origin-Embedder-Policy");
   res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  res.setHeader("Cross-Origin-Resource-Sharing", "*");
   next();
 });
 
@@ -47,8 +48,18 @@ const allowedOrigins = [
 
 ];
 
+app.use(
+  cors({
+    origin: [
+      process.env.FRONTEND_URL || "https://axivibe-vojm.vercel.app",
+      "http://localhost:5173",
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    credentials: true,
+  })
+);
 
-// ✅ Then add CORS
+//  Then add CORS
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 
