@@ -52,15 +52,15 @@ app.options("*", cors(corsOptions));
 
 // ✅ COOP/COEP setup — allows Google popup + Cloudinary images
 app.use((req, res, next) => {
-  // Allow Google popup to communicate
-  res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
-
-  // Prevent Cloudinary and other external resources from being blocked
+  // Allow popups (Google OAuth)
+  res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
+  // Remove embedder restriction
   res.removeHeader("Cross-Origin-Embedder-Policy");
+  // Allow loading images/scripts from any origin
   res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-
   next();
 });
+
 
 // ✅ Stripe webhook must come before express.json()
 app.use("/api/shop/order/webhook", bodyParser.raw({ type: "application/json" }));
