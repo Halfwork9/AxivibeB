@@ -34,7 +34,7 @@ const allowedOrigins = [
   "https://nikhilmamdekar.site",
   "https://www.nikhilmamdekar.site",
 ];
-
+app.set("trust proxy", 1);
 // ✅ CORS setup
 const corsOptions = {
   origin: function (origin, callback) {
