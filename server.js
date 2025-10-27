@@ -18,6 +18,8 @@ import commonFeatureRouter from "./routes/common/feature-routes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 import categoryRoutes from "./routes/admin/category-routes.js";
 import distributorRoutes from "./routes/distributor-routes.js";
+import helmet from "helmet";
+
 
 dotenv.config();
 
@@ -32,6 +34,9 @@ app.use((req, res, next) => {
   res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
   next();
 });
+app.use(helmet());
+app.use(helmet.crossOriginEmbedderPolicy({ policy: "unsafe-none" }));
+app.use(helmet.crossOriginOpenerPolicy({ policy: "unsafe-none" }));
 
 // ✅ 2️⃣ CORS setup for your frontend
 const allowedOrigins = [
