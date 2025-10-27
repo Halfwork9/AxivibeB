@@ -39,6 +39,7 @@ export const addToCart = async (req, res) => {
 };
 
 // FETCH cart items
+// FETCH cart items (auto-create cart if missing)
 export const fetchCartItems = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -46,13 +47,14 @@ export const fetchCartItems = async (req, res) => {
       return res.status(400).json({ success: false, message: "User id is mandatory!" });
     }
 
-    const cart = await Cart.findOne({ userId }).populate({
+    let cart = await Cart.findOne({ userId }).populate({
       path: "items.productId",
       select: "image title price salePrice",
     });
 
+    // ✅ Auto-create a new cart if none exists
     if (!cart) {
-      return res.status(404).json({ success: false, message: "Cart not found!" });
+      cart = await Cart.create({ userId, items: [] });
     }
 
     const validItems = cart.items.filter((productItem) => productItem.productId);
@@ -73,9 +75,10 @@ export const fetchCartItems = async (req, res) => {
     res.status(200).json({ success: true, data: { ...cart._doc, items: populateCartItems } });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ success: false, message: "Error" });
+    res.status(500).json({ success: false, message: "Error fetching cart" });
   }
 };
+
 
 // UPDATE cart item quantity
 export const updateCartItemQty = async (req, res) => {
