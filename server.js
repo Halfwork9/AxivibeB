@@ -40,10 +40,9 @@ app.use((req, res, next) => {
 // ✅ Allowed frontend URLs
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://axivibe.vercel.app",
-  "https://axivibe-vojm.vercel.app",
   "https://nikhilmamdekar.site",
   "https://www.nikhilmamdekar.site",
+  "https://api.nikhilmamdekar.site",
 ];
 
 app.use(
