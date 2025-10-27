@@ -23,14 +23,15 @@ const sendTokenResponse = (res, user, message) => {
     { expiresIn: "7d" }
   );
 
-  res.cookie("token", token, {
-    httpOnly: true,
-    secure: true,            // ✅ Must be true for HTTPS
-    sameSite: "None",        // ✅ Required for cross-domain
-    domain: process.env.COOKIE_DOMAIN || ".onrender.com", // ✅ Allow cross-subdomain
-    path: "/",               // ✅ Always send to all routes
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  });
+ res.cookie("token", token, {
+  httpOnly: true,
+  secure: true,
+  sameSite: "None",
+  domain: "axivibe.onrender.com",  // ✅ exact, not wildcard
+  path: "/",
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+});
+
 
   return res.json({
     success: true,
@@ -144,14 +145,15 @@ const authToken = jwt.sign(
   { expiresIn: "7d" }
 );
 
-res.cookie("token", authToken, {
+res.cookie("token", token, {
   httpOnly: true,
   secure: true,
   sameSite: "None",
-  domain: process.env.COOKIE_DOMAIN || ".onrender.com",
+  domain: "axivibe.onrender.com",  // ✅ exact, not wildcard
   path: "/",
   maxAge: 7 * 24 * 60 * 60 * 1000,
 });
+
 
 
 
