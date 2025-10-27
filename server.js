@@ -29,12 +29,13 @@ const MONGO_URI = process.env.MONGO_URI;
 app.set("trust proxy", 1);
 // ⚠️ MUST BE VERY TOP, before CORS or anything else
 app.use((req, res, next) => {
-  res.removeHeader("Cross-Origin-Opener-Policy");
-  res.removeHeader("Cross-Origin-Embedder-Policy");
+  // Let Cloudinary and other external media load freely
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+  res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
   res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-  res.setHeader("Cross-Origin-Resource-Sharing", "*");
   next();
 });
+
 
 // ✅ Allowed frontend URLs
 const allowedOrigins = [
@@ -43,15 +44,18 @@ const allowedOrigins = [
   "https://axivibe-vojm.vercel.app",
   "https://nikhilmamdekar.site",
   "https://www.nikhilmamdekar.site",
-  "https://axivibe1.onrender.com",
 ];
 
 app.use(
   cors({
-    origin: allowedOrigins,
-    credentials: true, // ✅ important for cookies
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
   })
 );
 
