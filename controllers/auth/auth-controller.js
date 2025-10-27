@@ -23,14 +23,14 @@ const sendTokenResponse = (res, user, message) => {
     { expiresIn: "7d" }
   );
 
- res.cookie("token", token, {
+res.cookie("token", token, {
   httpOnly: true,
-  secure: true,
-  sameSite: "None",
-  domain: "axivibe.onrender.com",  // ✅ exact, not wildcard
-  path: "/",
-  maxAge: 7 * 24 * 60 * 60 * 1000,
+  secure: true,          // true for HTTPS (Render uses HTTPS)
+  sameSite: "None",      // important for cross-domain cookies
+  domain: ".nikhilmamdekar.site",  // 👈 ADD THIS LINE
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
 });
+
 
 
   return res.json({
@@ -147,15 +147,11 @@ const authToken = jwt.sign(
 
 res.cookie("token", token, {
   httpOnly: true,
-  secure: true,
-  sameSite: "None",
-  domain: "axivibe.onrender.com",  // ✅ exact, not wildcard
-  path: "/",
-  maxAge: 7 * 24 * 60 * 60 * 1000,
+  secure: true,          // true for HTTPS (Render uses HTTPS)
+  sameSite: "None",      // important for cross-domain cookies
+  domain: ".nikhilmamdekar.site",  // 👈 ADD THIS LINE
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
 });
-
-
-
 
    res.status(200).json({
   success: true,
