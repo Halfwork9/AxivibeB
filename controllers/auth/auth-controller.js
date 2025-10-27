@@ -8,9 +8,22 @@ import sgMail from "../../config/sendgrid.js";  // Adjust path as needed
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+//
+// ✅ Helper: Send cookie securely (works for both login types)
+//
+const setAuthCookie = (res, token) => {
+  res.cookie("token", token, {
+    httpOnly: true,
+    secure: true,                // Render + HTTPS only
+    sameSite: "None",            // Needed for cross-site cookies
+    domain: ".nikhilmamdekar.site", // ✅ Allow across frontend + backend subdomain
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  });
+};
 
-// --- Helper: Send JWT as cookie ---
-// --- Helper: Send JWT as cookie ---
+//
+// ✅ Helper: Generate JWT and send cookie
+//
 const sendTokenResponse = (res, user, message) => {
   const token = jwt.sign(
     {
@@ -23,15 +36,7 @@ const sendTokenResponse = (res, user, message) => {
     { expiresIn: "7d" }
   );
 
-res.cookie("token", token, {
-  httpOnly: true,
-  secure: true,          // true for HTTPS (Render uses HTTPS)
-  sameSite: "None",      // important for cross-domain cookies
-  domain: ".nikhilmamdekar.site",  // 👈 ADD THIS LINE
-  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-});
-
-
+  setAuthCookie(res, token);
 
   return res.json({
     success: true,
@@ -45,24 +50,24 @@ res.cookie("token", token, {
   });
 };
 
-//  REGISTER USER
+//
+// ✅ Register User
+//
 export const registerUser = async (req, res) => {
   const { userName, email, password } = req.body;
   try {
     const existing = await User.findOne({ email });
-    if (existing) {
+    if (existing)
       return res.json({
         success: false,
         message: "User already exists with that email.",
       });
-    }
 
-    if (!password) {
+    if (!password)
       return res.status(400).json({
         success: false,
         message: "Password is required",
       });
-    }
 
     const hash = await bcrypt.hash(password, 12);
     const newUser = new User({
@@ -80,7 +85,9 @@ export const registerUser = async (req, res) => {
   }
 };
 
-//  EMAIL + PASSWORD LOGIN
+//
+// ✅ Email + Password Login
+//
 export const loginUser = async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -111,7 +118,9 @@ export const loginUser = async (req, res) => {
   }
 };
 
-//  GOOGLE LOGIN
+//
+// ✅ Google Login
+//
 export const googleLogin = async (req, res) => {
   try {
     const { token } = req.body;
@@ -138,39 +147,30 @@ export const googleLogin = async (req, res) => {
       });
     }
 
- //  Sign your own JWT for the user
-const authToken = jwt.sign(
-  { id: user._id, email: user.email, role: user.role },
-  process.env.JWT_SECRET || "CLIENT_SECRET_KEY",
-  { expiresIn: "7d" }
-);
+    // ✅ Create your own signed JWT
+    const authToken = jwt.sign(
+      { id: user._id, email: user.email, role: user.role },
+      process.env.JWT_SECRET || "CLIENT_SECRET_KEY",
+      { expiresIn: "7d" }
+    );
 
-res.cookie("token", token, {
-  httpOnly: true,
-  secure: true,          // true for HTTPS (Render uses HTTPS)
-  sameSite: "None",      // important for cross-domain cookies
-  domain: ".nikhilmamdekar.site",  // 👈 ADD THIS LINE
-  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-});
+    setAuthCookie(res, authToken);
 
-   res.status(200).json({
-  success: true,
-  message: "Google login successful",
-  user: {
-    id: user._id,
-    email: user.email,
-    userName: user.userName,
-    role: user.role,
-  },
-});
-
+    res.status(200).json({
+      success: true,
+      message: "Google login successful",
+      user: {
+        id: user._id,
+        email: user.email,
+        userName: user.userName,
+        role: user.role,
+      },
+    });
   } catch (err) {
     console.error("Google login error:", err.message);
     res.status(401).json({ success: false, message: "Google login failed" });
   }
 };
-
-
 
 //  FORGOT PASSWORD
 export const forgotPassword = async (req, res) => {
@@ -265,12 +265,12 @@ export const logoutUser = (req, res) => {
   res
     .clearCookie("token", {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: true,
       sameSite: "None",
+      domain: ".nikhilmamdekar.site", // ensure it clears from same domain scope
     })
     .json({ success: true, message: "Logged out successfully!" });
 };
-
 //  AUTH MIDDLEWARE
 export const authMiddleware = (req, res, next) => {
   let token =
