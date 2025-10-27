@@ -5,12 +5,11 @@ import cors from "cors";
 import dotenv from "dotenv";
 import bodyParser from "body-parser";
 
-// ✅ Route imports
 import brandRoutes from "./routes/admin/brand-routes.js";
 import authRouter from "./routes/auth/auth-routes.js";
 import adminProductsRouter from "./routes/admin/products-routes.js";
 import adminOrderRouter from "./routes/admin/order-routes.js";
-import shopProductsRouter from "./routes/shop/products-routes.js"; // includes reviews
+import shopProductsRouter from "./routes/shop/products-routes.js";
 import shopCartRouter from "./routes/shop/cart-routes.js";
 import shopAddressRouter from "./routes/shop/address-routes.js";
 import shopOrderRouter from "./routes/shop/order-routes.js";
@@ -26,28 +25,28 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
-app.set("trust proxy", 1);
-// ⚠️ MUST BE VERY TOP, before CORS or anything else
-// ✅ Allow external resources like Cloudinary
+// ✅ 1️⃣ Fix Cloudinary image blocking
 app.use((req, res, next) => {
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
   res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
-  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin"); // 👈 allows Cloudinary
-  res.setHeader("Access-Control-Allow-Private-Network", "true");
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
   next();
 });
 
-// ✅ Allowed frontend origins
+// ✅ 2️⃣ CORS setup for your frontend
 const allowedOrigins = [
-  "http://localhost:5173",
   "https://nikhilmamdekar.site",
   "https://www.nikhilmamdekar.site",
+  "http://localhost:5173",
+  "https://axivibe-vojm.vercel.app",
 ];
 
 app.use(
   cors({
     origin: allowedOrigins,
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
@@ -56,11 +55,10 @@ app.options("*", cors());
 // ✅ Stripe webhook must come before express.json()
 app.use("/api/shop/order/webhook", bodyParser.raw({ type: "application/json" }));
 
-// ✅ General middleware
 app.use(cookieParser());
 app.use(express.json());
 
-// ✅ Health check
+// ✅ Health Check
 app.get("/", (req, res) => {
   res.json({ success: true, message: "Backend API is running 🚀" });
 });
@@ -78,9 +76,9 @@ app.use("/api/common/feature", commonFeatureRouter);
 app.use("/api/admin/brands", brandRoutes);
 app.use("/api/admin/categories", categoryRoutes);
 app.use("/api/distributors", distributorRoutes);
-app.use("/api/shop/products", shopProductsRouter); // Handles both products + reviews
+app.use("/api/shop/products", shopProductsRouter);
 
-// ✅ Connect to MongoDB and start server
+// ✅ MongoDB connection
 mongoose
   .connect(MONGO_URI)
   .then(() => {
