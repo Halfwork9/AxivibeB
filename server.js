@@ -28,32 +28,25 @@ const MONGO_URI = process.env.MONGO_URI;
 
 app.set("trust proxy", 1);
 // ⚠️ MUST BE VERY TOP, before CORS or anything else
+// ✅ Allow external resources like Cloudinary
 app.use((req, res, next) => {
-  // Let Cloudinary and other external media load freely
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
   res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
-  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin"); // 👈 allows Cloudinary
+  res.setHeader("Access-Control-Allow-Private-Network", "true");
   next();
 });
 
-
-// ✅ Allowed frontend URLs
+// ✅ Allowed frontend origins
 const allowedOrigins = [
   "http://localhost:5173",
   "https://nikhilmamdekar.site",
   "https://www.nikhilmamdekar.site",
-  "https://api.nikhilmamdekar.site",
 ];
 
 app.use(
   cors({
-    origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
+    origin: allowedOrigins,
     credentials: true,
   })
 );
