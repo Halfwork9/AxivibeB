@@ -27,29 +27,29 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
-// ✅ 1️⃣ Fix Cloudinary image blocking
-app.use((req, res, next) => {
- // res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
- // res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
- // res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+// Add a specific route to serve images with proper CORS headers
+app.use('/uploads', (req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
   next();
-});
-
+}, express.static('uploads'));
 // Update helmet configuration
 app.use(helmet({
-  crossOriginEmbedderPolicy: false,
-  crossOriginOpenerPolicy: false,
+  crossOriginEmbedderPolicy: false, // Disable COEP
+  crossOriginOpenerPolicy: false,   // Disable COOP
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:"], // Allow images from any HTTPS source
-      scriptSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:", "http:", "res.cloudinary.com"], // Allow images from any source
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://apis.google.com"],
       styleSrc: ["'self'", "'unsafe-inline'"],
+      connectSrc: ["'self'", "https://api.nikhilmamdekar.site"],
     },
   },
 }));
 
-// ✅ 2️⃣ CORS setup for your frontend
+// Update CORS configuration
 const allowedOrigins = [
   "https://nikhilmamdekar.site",
   "https://www.nikhilmamdekar.site",
@@ -63,8 +63,8 @@ app.use(
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
-
-     optionsSuccessStatus: 200,
+    // Add these options
+    optionsSuccessStatus: 200,
     preflightContinue: false,
   })
 );
