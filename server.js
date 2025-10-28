@@ -29,14 +29,25 @@ const MONGO_URI = process.env.MONGO_URI;
 
 // ✅ 1️⃣ Fix Cloudinary image blocking
 app.use((req, res, next) => {
-  res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
-  res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
-  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+ // res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+ // res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
+ // res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
   next();
 });
-app.use(helmet());
-app.use(helmet.crossOriginEmbedderPolicy({ policy: "unsafe-none" }));
-app.use(helmet.crossOriginOpenerPolicy({ policy: "unsafe-none" }));
+
+// Update helmet configuration
+app.use(helmet({
+  crossOriginEmbedderPolicy: false,
+  crossOriginOpenerPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"], // Allow images from any HTTPS source
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+    },
+  },
+}));
 
 // ✅ 2️⃣ CORS setup for your frontend
 const allowedOrigins = [
@@ -52,6 +63,9 @@ app.use(
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+
+     optionsSuccessStatus: 200,
+    preflightContinue: false,
   })
 );
 
