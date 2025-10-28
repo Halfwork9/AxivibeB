@@ -10,12 +10,15 @@ const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 // ✅ Helper: Send cookie securely (works for both login types)
 //
 const setAuthCookie = (res, token) => {
+  // Try without specifying domain first
   res.cookie("token", token, {
     httpOnly: true,
-    secure: true, // Render + HTTPS only
-    sameSite: "None", // Needed for cross-site cookies
-    domain: ".nikhilmamdekar.site", // ✅ Allow across frontend + backend subdomain
+    secure: true, // Required for HTTPS
+    sameSite: "None", // Required for cross-site cookies
+    // Remove the domain property to let browser handle it
+    // domain: ".nikhilmamdekar.site",
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    path: "/", // Ensure cookie is available on all paths
   });
 };
 //
@@ -236,7 +239,8 @@ export const logoutUser = (req, res) => {
       httpOnly: true,
       secure: true,
       sameSite: "None",
-      domain: ".nikhilmamdekar.site", // ensure it clears from same domain scope
+      // Remove domain property here too
+      path: "/",
     })
     .json({ success: true, message: "Logged out successfully!" });
 };
