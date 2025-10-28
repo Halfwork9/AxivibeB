@@ -81,21 +81,28 @@ app.use(express.json());
 app.get("/", (req, res) => {
   res.json({ success: true, message: "Backend API is running 🚀" });
 });
-// Add a proxy route for Cloudinary images
+// Add this to your server.js file
 app.get('/api/proxy/image', async (req, res) => {
   try {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'URL is required' });
     
-    // Only allow Cloudinary URLs
-    if (!url.includes('res.cloudinary.com')) {
-      return res.status(403).json({ error: 'Unauthorized image source' });
-    }
+    // Fetch the image
+    const response = await axios.get(url, { 
+      responseType: 'stream',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
     
-    const response = await axios.get(url, { responseType: 'stream' });
+    // Set appropriate headers
     res.setHeader('Content-Type', response.headers['content-type']);
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
+    
+    // Pipe the image data to the response
     response.data.pipe(res);
   } catch (error) {
+    console.error('Error proxying image:', error.message);
     res.status(500).json({ error: 'Failed to fetch image' });
   }
 });
