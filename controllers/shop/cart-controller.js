@@ -39,7 +39,6 @@ export const addToCart = async (req, res) => {
 };
 
 // FETCH cart items
-// FETCH cart items (auto-create cart if missing)
 export const fetchCartItems = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -49,10 +48,10 @@ export const fetchCartItems = async (req, res) => {
 
     let cart = await Cart.findOne({ userId }).populate({
       path: "items.productId",
-      select: "image title price salePrice",
+      select: "image images title price salePrice",
     });
 
-    // ✅ Auto-create a new cart if none exists
+    // Auto-create a new cart if none exists
     if (!cart) {
       cart = await Cart.create({ userId, items: [] });
     }
@@ -66,6 +65,7 @@ export const fetchCartItems = async (req, res) => {
     const populateCartItems = validItems.map((item) => ({
       productId: item.productId._id,
       image: item.productId.image,
+      images: item.productId.images,
       title: item.productId.title,
       price: item.productId.price,
       salePrice: item.productId.salePrice,
@@ -78,7 +78,6 @@ export const fetchCartItems = async (req, res) => {
     res.status(500).json({ success: false, message: "Error fetching cart" });
   }
 };
-
 
 // UPDATE cart item quantity
 export const updateCartItemQty = async (req, res) => {
@@ -102,11 +101,12 @@ export const updateCartItemQty = async (req, res) => {
     cart.items[findCurrentProductIndex].quantity = quantity;
     await cart.save();
 
-    await cart.populate({ path: "items.productId", select: "image title price salePrice" });
+    await cart.populate({ path: "items.productId", select: "image images title price salePrice" });
 
     const populateCartItems = cart.items.map((item) => ({
       productId: item.productId ? item.productId._id : null,
       image: item.productId ? item.productId.image : null,
+      images: item.productId ? item.productId.images : null,
       title: item.productId ? item.productId.title : "Product not found",
       price: item.productId ? item.productId.price : null,
       salePrice: item.productId ? item.productId.salePrice : null,
@@ -130,7 +130,7 @@ export const deleteCartItem = async (req, res) => {
 
     const cart = await Cart.findOne({ userId }).populate({
       path: "items.productId",
-      select: "image title price salePrice",
+      select: "image images title price salePrice",
     });
 
     if (!cart) return res.status(404).json({ success: false, message: "Cart not found!" });
@@ -138,11 +138,12 @@ export const deleteCartItem = async (req, res) => {
     cart.items = cart.items.filter((item) => item.productId._id.toString() !== productId);
     await cart.save();
 
-    await cart.populate({ path: "items.productId", select: "image title price salePrice" });
+    await cart.populate({ path: "items.productId", select: "image images title price salePrice" });
 
     const populateCartItems = cart.items.map((item) => ({
       productId: item.productId ? item.productId._id : null,
       image: item.productId ? item.productId.image : null,
+      images: item.productId ? item.productId.images : null,
       title: item.productId ? item.productId.title : "Product not found",
       price: item.productId ? item.productId.price : null,
       salePrice: item.productId ? item.productId.salePrice : null,
@@ -153,5 +154,28 @@ export const deleteCartItem = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: "Error" });
+  }
+};
+
+// CLEAR cart
+export const clearCart = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ success: false, message: "User id is mandatory!" });
+    }
+
+    const cart = await Cart.findOne({ userId });
+    if (!cart) {
+      return res.status(404).json({ success: false, message: "Cart not found!" });
+    }
+
+    cart.items = [];
+    await cart.save();
+
+    res.status(200).json({ success: true, message: "Cart cleared successfully" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: "Error clearing cart" });
   }
 };
