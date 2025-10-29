@@ -1,10 +1,14 @@
+// server.js
 import express from "express";
 import mongoose from "mongoose";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import dotenv from "dotenv";
 import bodyParser from "body-parser";
+import helmet from "helmet";
+import axios from "axios"; // ✅ converted from require() to import
 
+// --- Routes ---
 import brandRoutes from "./routes/admin/brand-routes.js";
 import authRouter from "./routes/auth/auth-routes.js";
 import adminProductsRouter from "./routes/admin/products-routes.js";
@@ -18,39 +22,53 @@ import commonFeatureRouter from "./routes/common/feature-routes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 import categoryRoutes from "./routes/admin/category-routes.js";
 import distributorRoutes from "./routes/distributor-routes.js";
-import helmet from "helmet";
 
-const axios = require('axios');
-
+// --- Config ---
 dotenv.config();
-
 const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
-// Add a specific route to serve images with proper CORS headers
-app.use('/uploads', (req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
-  next();
-}, express.static('uploads'));
-// Update helmet configuration
-app.use(helmet({
-  crossOriginEmbedderPolicy: false, // Disable COEP
-  crossOriginOpenerPolicy: false,   // Disable COOP
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:", "http:", "res.cloudinary.com"], // Allow images from any source
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://apis.google.com"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      connectSrc: ["'self'", "https://api.nikhilmamdekar.site"],
-    },
+// --- Serve uploads folder with proper CORS headers ---
+app.use(
+  "/uploads",
+  (req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET");
+    res.header("Access-Control-Allow-Headers", "Content-Type");
+    next();
   },
-}));
+  express.static("uploads")
+);
 
-// Update CORS configuration
+// --- Helmet Security Config ---
+app.use(
+  helmet({
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        imgSrc: [
+          "'self'",
+          "data:",
+          "https:",
+          "http:",
+          "res.cloudinary.com",
+        ],
+        scriptSrc: ["'self'", "'unsafe-inline'", "https://apis.google.com"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        connectSrc: [
+          "'self'",
+          "https://api.nikhilmamdekar.site",
+          "https://res.cloudinary.com",
+        ],
+      },
+    },
+  })
+);
+
+// --- CORS Configuration ---
 const allowedOrigins = [
   "https://nikhilmamdekar.site",
   "https://www.nikhilmamdekar.site",
@@ -64,52 +82,51 @@ app.use(
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
-    // Add these options
     optionsSuccessStatus: 200,
-    preflightContinue: false,
   })
 );
 
 app.options("*", cors());
 
-// ✅ Stripe webhook must come before express.json()
+// --- Stripe Webhook (raw body before express.json) ---
 app.use("/api/shop/order/webhook", bodyParser.raw({ type: "application/json" }));
 
+// --- Middlewares ---
 app.use(cookieParser());
 app.use(express.json());
 
-// ✅ Health Check
+// --- Health Check ---
 app.get("/", (req, res) => {
   res.json({ success: true, message: "Backend API is running 🚀" });
 });
-// Add this to your server.js file
-app.get('/api/proxy/image', async (req, res) => {
+
+// --- Proxy route for Cloudinary / external images ---
+app.get("/api/proxy/image", async (req, res) => {
   try {
     const { url } = req.query;
-    if (!url) return res.status(400).json({ error: 'URL is required' });
-    
-    // Fetch the image
-    const response = await axios.get(url, { 
-      responseType: 'stream',
+    if (!url) return res.status(400).json({ error: "URL is required" });
+
+    const response = await axios.get(url, {
+      responseType: "stream",
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0 Safari/537.36",
       },
-      timeout: 10000, // Add timeout to prevent hanging
-      maxRedirects: 5, // Follow redirects
+      timeout: 10000,
+      maxRedirects: 5,
     });
-    
-    // Set appropriate headers
-    res.setHeader('Content-Type', response.headers['content-type']);
-    res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
-    
-    // Pipe the image data to the response
+
+    res.setHeader("Content-Type", response.headers["content-type"]);
+    res.setHeader("Cache-Control", "public, max-age=86400");
+
     response.data.pipe(res);
   } catch (error) {
-    console.error('Error proxying image:', error.message);
-    res.status(500).json({ error: 'Failed to fetch image' });
+    console.error("Error proxying image:", error.message);
+    res.status(500).json({ error: "Failed to fetch image" });
   }
 });
-// ✅ API Routes
+
+// --- API Routes ---
 app.use("/api/auth", authRouter);
 app.use("/api/admin/products", adminProductsRouter);
 app.use("/api/admin/orders", adminOrderRouter);
@@ -124,11 +141,13 @@ app.use("/api/admin/categories", categoryRoutes);
 app.use("/api/distributors", distributorRoutes);
 app.use("/api/shop/products", shopProductsRouter);
 
-// ✅ MongoDB connection
+// --- MongoDB Connection ---
 mongoose
-  .connect(MONGO_URI)
+  .connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => {
     console.log("✅ MongoDB connected");
-    app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+    app.listen(PORT, () =>
+      console.log(`🚀 Server running on port ${PORT}`)
+    );
   })
   .catch((err) => console.error("❌ MongoDB connection error:", err));
