@@ -63,7 +63,7 @@ export const fetchCartItems = async (req, res) => {
       await cart.save();
     }
 
-    // ✅ Flatten product details for frontend
+    // Flatten product details for frontend
     const flattenedItems = validItems.map((item) => {
       const product = item.productId;
       return {
@@ -78,6 +78,8 @@ export const fetchCartItems = async (req, res) => {
         quantity: item.quantity,
       };
     });
+
+    console.log("Flattened cart items:", flattenedItems); // Debug log
 
     res.status(200).json({
       success: true,
