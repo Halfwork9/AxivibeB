@@ -51,28 +51,38 @@ export const fetchCartItems = async (req, res) => {
       select: "image images title price salePrice",
     });
 
-    // Auto-create a new cart if none exists
+    // Auto-create new cart if none exists
     if (!cart) {
       cart = await Cart.create({ userId, items: [] });
     }
 
-    const validItems = cart.items.filter((productItem) => productItem.productId);
+    // Filter out deleted products
+    const validItems = cart.items.filter((item) => item.productId);
     if (validItems.length < cart.items.length) {
       cart.items = validItems;
       await cart.save();
     }
 
-    const populateCartItems = validItems.map((item) => ({
-      productId: item.productId._id,
-      image: item.productId.image,
-      images: item.productId.images,
-      title: item.productId.title,
-      price: item.productId.price,
-      salePrice: item.productId.salePrice,
-      quantity: item.quantity,
-    }));
+    // ✅ Flatten product details for frontend
+    const flattenedItems = validItems.map((item) => {
+      const product = item.productId;
+      return {
+        _id: item._id,
+        userId,
+        productId: product?._id,
+        title: product?.title,
+        image: product?.image || (product?.images?.[0] ?? ""),
+        images: product?.images || [],
+        price: product?.price,
+        salePrice: product?.salePrice,
+        quantity: item.quantity,
+      };
+    });
 
-    res.status(200).json({ success: true, data: { ...cart._doc, items: populateCartItems } });
+    res.status(200).json({
+      success: true,
+      data: { ...cart._doc, items: flattenedItems },
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: "Error fetching cart" });
