@@ -59,22 +59,20 @@ export const addToCart = async (req, res) => {
 };
 
 // ✅ FETCH cart
-export const fetchCartItems = async (req, res) => {
-  try {
-    const { userId } = req.params;
-    if (!userId)
-      return res.status(400).json({ success: false, message: "User ID required" });
-
-    let cart = await Cart.findOne({ userId });
-    if (!cart) cart = await Cart.create({ userId, items: [] });
-
-    const flattenedItems = await populateAndFlattenCart(cart, userId);
-    return res.status(200).json({ success: true, cartItems: flattenedItems });
-  } catch (err) {
-    console.error("Fetch cart error:", err);
-    res.status(500).json({ success: false, message: "Error fetching cart" });
+export const fetchCartItems = createAsyncThunk(
+  "shopCart/fetchCartItems",
+  async (userId, { rejectWithValue }) => {
+    try {
+      const { data } = await api.get(`/shop/cart/get/${userId}`);
+      // handle both formats: {cartItems: [...]} or {data: [...]}
+      return data.cartItems || data.data || [];
+    } catch (err) {
+      console.error("❌ fetchCartItems error:", err);
+      return rejectWithValue(err.response?.data || "Error fetching cart");
+    }
   }
-};
+);
+
 
 // ✅ UPDATE qty
 export const updateCartItemQty = async (req, res) => {
