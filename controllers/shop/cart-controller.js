@@ -12,15 +12,20 @@ const populateAndFlattenCart = async (cart, userId) => {
 
   return validItems.map((item) => {
     const product = item.productId;
+    const mainImage =
+      product?.image && product.image.trim() !== ""
+        ? product.image
+        : product?.images?.[0] || "";
+
     return {
       _id: item._id,
       userId,
-      productId: product?._id,
-      title: product?.title,
-      image: product?.image || (product?.images?.[0] ?? ""),
+      productId: product?._id?.toString(),
+      title: product?.title || "Untitled Product",
+      image: mainImage,
       images: product?.images || [],
-      price: product?.price,
-      salePrice: product?.salePrice,
+      price: product?.price || 0,
+      salePrice: product?.salePrice || 0,
       quantity: item.quantity,
     };
   });
@@ -46,14 +51,14 @@ export const addToCart = async (req, res) => {
 
     await cart.save();
     const flattenedItems = await populateAndFlattenCart(cart, userId);
-    res.status(200).json({ success: true, data: flattenedItems });
+    return res.status(200).json({ success: true, cartItems: flattenedItems });
   } catch (err) {
     console.error("Add to cart error:", err);
     res.status(500).json({ success: false, message: "Error adding to cart" });
   }
 };
 
-// ✅ FETCH cart items
+// ✅ FETCH cart
 export const fetchCartItems = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -64,14 +69,14 @@ export const fetchCartItems = async (req, res) => {
     if (!cart) cart = await Cart.create({ userId, items: [] });
 
     const flattenedItems = await populateAndFlattenCart(cart, userId);
-    res.status(200).json({ success: true, data: flattenedItems });
+    return res.status(200).json({ success: true, cartItems: flattenedItems });
   } catch (err) {
     console.error("Fetch cart error:", err);
     res.status(500).json({ success: false, message: "Error fetching cart" });
   }
 };
 
-// ✅ UPDATE cart item qty
+// ✅ UPDATE qty
 export const updateCartItemQty = async (req, res) => {
   try {
     const { userId, productId, quantity } = req.body;
@@ -84,13 +89,13 @@ export const updateCartItemQty = async (req, res) => {
 
     const idx = cart.items.findIndex((i) => i.productId.toString() === productId);
     if (idx === -1)
-      return res.status(404).json({ success: false, message: "Item not in cart" });
+      return res.status(404).json({ success: false, message: "Item not found" });
 
     cart.items[idx].quantity = quantity;
     await cart.save();
 
     const flattenedItems = await populateAndFlattenCart(cart, userId);
-    res.status(200).json({ success: true, data: flattenedItems });
+    return res.status(200).json({ success: true, cartItems: flattenedItems });
   } catch (err) {
     console.error("Update cart error:", err);
     res.status(500).json({ success: false, message: "Error updating cart" });
@@ -101,9 +106,6 @@ export const updateCartItemQty = async (req, res) => {
 export const deleteCartItem = async (req, res) => {
   try {
     const { userId, productId } = req.params;
-    if (!userId || !productId)
-      return res.status(400).json({ success: false, message: "Invalid params" });
-
     const cart = await Cart.findOne({ userId });
     if (!cart)
       return res.status(404).json({ success: false, message: "Cart not found" });
@@ -112,7 +114,7 @@ export const deleteCartItem = async (req, res) => {
     await cart.save();
 
     const flattenedItems = await populateAndFlattenCart(cart, userId);
-    res.status(200).json({ success: true, data: flattenedItems });
+    return res.status(200).json({ success: true, cartItems: flattenedItems });
   } catch (err) {
     console.error("Delete cart error:", err);
     res.status(500).json({ success: false, message: "Error deleting item" });
@@ -123,9 +125,6 @@ export const deleteCartItem = async (req, res) => {
 export const clearCart = async (req, res) => {
   try {
     const { userId } = req.params;
-    if (!userId)
-      return res.status(400).json({ success: false, message: "User ID required" });
-
     const cart = await Cart.findOne({ userId });
     if (!cart)
       return res.status(404).json({ success: false, message: "Cart not found" });
@@ -133,7 +132,7 @@ export const clearCart = async (req, res) => {
     cart.items = [];
     await cart.save();
 
-    res.status(200).json({ success: true, data: [] });
+    return res.status(200).json({ success: true, cartItems: [] });
   } catch (err) {
     console.error("Clear cart error:", err);
     res.status(500).json({ success: false, message: "Error clearing cart" });
