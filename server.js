@@ -19,6 +19,7 @@ import uploadRoutes from "./routes/uploadRoutes.js";
 import categoryRoutes from "./routes/admin/category-routes.js";
 import distributorRoutes from "./routes/distributor-routes.js";
 import helmet from "helmet";
+import imageProxyRoute from "./routes/common/image-proxy-route.js";
 
 const axios = require('axios');
 
@@ -123,7 +124,7 @@ app.use("/api/admin/brands", brandRoutes);
 app.use("/api/admin/categories", categoryRoutes);
 app.use("/api/distributors", distributorRoutes);
 app.use("/api/shop/products", shopProductsRouter);
-
+app.use("/api/image-proxy", imageProxyRoute);
 // ✅ MongoDB connection
 mongoose
   .connect(MONGO_URI)
