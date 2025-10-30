@@ -9,23 +9,19 @@ import {
 
 const router = express.Router();
 
-/**
- * 🛒 Final Correct Routes — match frontend Redux slice exactly
- */
-
-// Add to cart
+// 🛒 Add item to cart
 router.post("/add", addToCart);
 
-// Fetch all user cart items
+// 🛒 Get user's cart
 router.get("/get/:userId", fetchCartItems);
 
-// Update quantity
+// 🛒 Update quantity
 router.put("/update", updateCartItemQty);
 
-// Delete one cart item
+// 🛒 Delete single item (IMPORTANT: must come before /clear)
 router.delete("/:userId/:productId", deleteCartItem);
 
-// Clear full cart
+// 🧹 Clear full cart
 router.delete("/clear/:userId", clearCart);
 
 export default router;
