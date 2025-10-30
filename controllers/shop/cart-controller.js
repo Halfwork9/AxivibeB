@@ -1,34 +1,36 @@
 import Cart from "../../models/Cart.js";
 import Product from "../../models/Product.js";
 
-// ✅ Helper — populate and flatten cart
+// 🧩 Normalize product and images
+const formatProduct = (product, item, userId) => {
+  const mainImage =
+    product?.image && product.image.trim() !== ""
+      ? product.image
+      : product?.images?.[0] || "";
+
+  return {
+    _id: item._id,
+    userId,
+    productId: product?._id?.toString(),
+    title: product?.title || "Untitled Product",
+    image: mainImage,
+    images: product?.images || [],
+    price: product?.price || 0,
+    salePrice: product?.salePrice || 0,
+    quantity: item.quantity,
+  };
+};
+
+// ✅ Populate cart and flatten
 const populateAndFlattenCart = async (cart, userId) => {
   await cart.populate({
     path: "items.productId",
     select: "image images title price salePrice",
   });
 
-  const validItems = cart.items.filter((item) => item.productId);
-
-  return validItems.map((item) => {
-    const product = item.productId;
-    const mainImage =
-      product?.image && product.image.trim() !== ""
-        ? product.image
-        : product?.images?.[0] || "";
-
-    return {
-      _id: item._id,
-      userId,
-      productId: product?._id?.toString(),
-      title: product?.title || "Untitled Product",
-      image: mainImage,
-      images: product?.images || [],
-      price: product?.price || 0,
-      salePrice: product?.salePrice || 0,
-      quantity: item.quantity,
-    };
-  });
+  return cart.items
+    .filter((i) => i.productId)
+    .map((i) => formatProduct(i.productId, i, userId));
 };
 
 // ✅ ADD to cart
@@ -36,11 +38,15 @@ export const addToCart = async (req, res) => {
   try {
     const { userId, productId, quantity } = req.body;
     if (!userId || !productId || quantity <= 0)
-      return res.status(400).json({ success: false, message: "Invalid data" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid data" });
 
     const product = await Product.findById(productId);
     if (!product)
-      return res.status(404).json({ success: false, message: "Product not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
 
     let cart = await Cart.findOne({ userId });
     if (!cart) cart = new Cart({ userId, items: [] });
@@ -50,10 +56,11 @@ export const addToCart = async (req, res) => {
     else cart.items[idx].quantity += quantity;
 
     await cart.save();
+
     const flattenedItems = await populateAndFlattenCart(cart, userId);
     return res.status(200).json({ success: true, cartItems: flattenedItems });
   } catch (err) {
-    console.error("Add to cart error:", err);
+    console.error("❌ Add to cart error:", err);
     res.status(500).json({ success: false, message: "Error adding to cart" });
   }
 };
@@ -71,7 +78,7 @@ export const fetchCartItems = async (req, res) => {
     const flattenedItems = await populateAndFlattenCart(cart, userId);
     return res.status(200).json({ success: true, cartItems: flattenedItems });
   } catch (err) {
-    console.error("Fetch cart error:", err);
+    console.error("❌ Fetch cart error:", err);
     res.status(500).json({ success: false, message: "Error fetching cart" });
   }
 };
@@ -97,7 +104,7 @@ export const updateCartItemQty = async (req, res) => {
     const flattenedItems = await populateAndFlattenCart(cart, userId);
     return res.status(200).json({ success: true, cartItems: flattenedItems });
   } catch (err) {
-    console.error("Update cart error:", err);
+    console.error("❌ Update cart error:", err);
     res.status(500).json({ success: false, message: "Error updating cart" });
   }
 };
@@ -116,7 +123,7 @@ export const deleteCartItem = async (req, res) => {
     const flattenedItems = await populateAndFlattenCart(cart, userId);
     return res.status(200).json({ success: true, cartItems: flattenedItems });
   } catch (err) {
-    console.error("Delete cart error:", err);
+    console.error("❌ Delete cart error:", err);
     res.status(500).json({ success: false, message: "Error deleting item" });
   }
 };
@@ -134,7 +141,7 @@ export const clearCart = async (req, res) => {
 
     return res.status(200).json({ success: true, cartItems: [] });
   } catch (err) {
-    console.error("Clear cart error:", err);
+    console.error("❌ Clear cart error:", err);
     res.status(500).json({ success: false, message: "Error clearing cart" });
   }
 };
