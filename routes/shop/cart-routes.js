@@ -9,10 +9,24 @@ import {
 
 const router = express.Router();
 
+/**
+ * Cart Routes
+ * Consistent with frontend Redux slice endpoints
+ */
+
+//  Add to cart
 router.post("/add", addToCart);
+
+//  Fetch user cart
 router.get("/get/:userId", fetchCartItems);
-router.put("/update-cart", updateCartItemQty);
-router.delete("/:userId/:productId", deleteCartItem);
+
+//  Update cart quantity
+router.put("/update", updateCartItemQty);
+
+//  Delete specific product from cart
+router.delete("/delete/:userId/:productId", deleteCartItem);
+
+//  Clear entire cart
 router.delete("/clear/:userId", clearCart);
 
 export default router;
