@@ -1,4 +1,3 @@
-// server.js
 import express from "express";
 import mongoose from "mongoose";
 import cookieParser from "cookie-parser";
@@ -6,7 +5,8 @@ import cors from "cors";
 import dotenv from "dotenv";
 import bodyParser from "body-parser";
 import helmet from "helmet";
-import axios from "axios"; // ✅ converted from require() to import
+import axios from "axios";
+import path from "path";
 
 // --- Routes ---
 import brandRoutes from "./routes/admin/brand-routes.js";
@@ -140,6 +140,21 @@ app.use("/api/admin/brands", brandRoutes);
 app.use("/api/admin/categories", categoryRoutes);
 app.use("/api/distributors", distributorRoutes);
 app.use("/api/shop/products", shopProductsRouter);
+
+// --- Serve React App ---
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, "dist")));
+
+// Handle client-side routing
+// --- Handle client-side routing ---
+app.get("/shop/*", (req, res) => {
+  res.sendFile(path.join(__dirname, "dist", "index.html"));
+});
+
+// For any other request, serve the index.html
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "dist", "index.html"));
+});
 
 // --- MongoDB Connection ---
 mongoose
