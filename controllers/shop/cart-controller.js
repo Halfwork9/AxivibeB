@@ -1,15 +1,18 @@
 import Cart from "../../models/Cart.js";
 import Product from "../../models/Product.js";
 
-// 🧩 Normalize product and images
 const formatProduct = (product, item, userId) => {
+  if (!product) return null; // protect against null population
+
   const mainImage =
     product?.image && product.image.trim() !== ""
       ? product.image
-      : product?.images?.[0] || "";
+      : Array.isArray(product?.images) && product.images.length > 0
+      ? product.images[0]
+      : "";
 
   return {
-    _id: item._id,
+    _id: item._id?.toString(),
     userId,
     productId: product?._id?.toString(),
     title: product?.title || "Untitled Product",
@@ -21,7 +24,6 @@ const formatProduct = (product, item, userId) => {
   };
 };
 
-// ✅ Populate cart and flatten
 const populateAndFlattenCart = async (cart, userId) => {
   await cart.populate({
     path: "items.productId",
@@ -29,8 +31,33 @@ const populateAndFlattenCart = async (cart, userId) => {
   });
 
   return cart.items
-    .filter((i) => i.productId)
-    .map((i) => formatProduct(i.productId, i, userId));
+    .filter((i) => i.productId) // remove broken references
+    .map((i) => formatProduct(i.productId, i, userId))
+    .filter(Boolean);
+};
+
+// ✅ FETCH cart
+export const fetchCartItems = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ success: false, message: "User ID required" });
+    }
+
+    let cart = await Cart.findOne({ userId });
+    if (!cart) {
+      cart = await Cart.create({ userId, items: [] });
+    }
+
+    const flattenedItems = await populateAndFlattenCart(cart, userId);
+    return res.status(200).json({
+      success: true,
+      cartItems: Array.isArray(flattenedItems) ? flattenedItems : [],
+    });
+  } catch (err) {
+    console.error("❌ Fetch cart error:", err);
+    res.status(500).json({ success: false, message: "Error fetching cart" });
+  }
 };
 
 // ✅ ADD to cart
@@ -65,23 +92,7 @@ export const addToCart = async (req, res) => {
   }
 };
 
-// ✅ FETCH cart
-export const fetchCartItems = async (req, res) => {
-  try {
-    const { userId } = req.params;
-    if (!userId)
-      return res.status(400).json({ success: false, message: "User ID required" });
 
-    let cart = await Cart.findOne({ userId });
-    if (!cart) cart = await Cart.create({ userId, items: [] });
-
-    const flattenedItems = await populateAndFlattenCart(cart, userId);
-    return res.status(200).json({ success: true, cartItems: flattenedItems });
-  } catch (err) {
-    console.error("❌ Fetch cart error:", err);
-    res.status(500).json({ success: false, message: "Error fetching cart" });
-  }
-};
 
 // ✅ UPDATE qty
 export const updateCartItemQty = async (req, res) => {
