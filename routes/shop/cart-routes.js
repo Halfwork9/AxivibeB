@@ -1,3 +1,4 @@
+// backend/routes/shop/cart-routes.js
 import express from "express";
 import {
   addToCart,
@@ -9,19 +10,19 @@ import {
 
 const router = express.Router();
 
-// 🛒 Add item to cart
+// Add to cart
 router.post("/add", addToCart);
 
-// 🛒 Get user's cart
+// Fetch user cart
 router.get("/get/:userId", fetchCartItems);
 
-// 🛒 Update quantity
+// Update cart quantity
 router.put("/update", updateCartItemQty);
 
-// 🛒 Delete single item (IMPORTANT: must come before /clear)
-router.delete("/:userId/:productId", deleteCartItem);
+// Delete specific product from cart
+router.delete("/delete/:userId/:productId", deleteCartItem);
 
-// 🧹 Clear full cart
+// Clear entire cart
 router.delete("/clear/:userId", clearCart);
 
 export default router;
