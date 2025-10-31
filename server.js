@@ -35,6 +35,36 @@ const MONGO_URI = process.env.MONGO_URI;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// --- CORS Configuration ---
+const allowedOrigins = [
+  "https://nikhilmamdekar.site",
+  "https://www.nikhilmamdekar.site",
+  "http://localhost:5173",
+  "https://axivibe-vojm.vercel.app",
+];
+
+// Configure CORS with more permissive settings
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      return callback(null, true);
+    } else {
+      console.log("CORS policy blocked origin:", origin);
+      return callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  optionsSuccessStatus: 200,
+}));
+
+// Handle pre-flight requests for all routes
+app.options('*', cors());
+
 // --- Serve uploads folder with proper CORS headers ---
 app.use(
   "/uploads",
@@ -67,32 +97,13 @@ app.use(
         connectSrc: [
           "'self'",
           "https://api.nikhilmamdekar.site",
+          "https://nikhilmamdekar.site",
           "https://res.cloudinary.com",
         ],
       },
     },
   })
 );
-
-// --- CORS Configuration ---
-const allowedOrigins = [
-  "https://nikhilmamdekar.site",
-  "https://www.nikhilmamdekar.site",
-  "http://localhost:5173",
-  "https://axivibe-vojm.vercel.app",
-];
-
-app.use(
-  cors({
-    origin: allowedOrigins,
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    optionsSuccessStatus: 200,
-  })
-);
-
-app.options("*", cors());
 
 // --- Stripe Webhook (raw body before express.json) ---
 app.use("/api/shop/order/webhook", bodyParser.raw({ type: "application/json" }));
