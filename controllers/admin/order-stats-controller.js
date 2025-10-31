@@ -4,6 +4,8 @@ import mongoose from "mongoose";
 // ✅ 1️⃣ Get Order Statistics
 export const getOrderStats = async (req, res) => {
   try {
+    console.log("Attempting to fetch order stats..."); // Debug log
+
     // Use a single aggregation pipeline for efficiency
     const stats = await Order.aggregate([
       {
@@ -39,7 +41,9 @@ export const getOrderStats = async (req, res) => {
       },
     ]);
 
-    // 🔝 Top 5 Selling Products (this is a separate query, which is fine)
+    console.log("Stats aggregation successful:", stats[0]); // Debug log
+
+    // 🔝 Top 5 Selling Products (FIXED)
     const topProducts = await Order.aggregate([
       { $unwind: "$cartItems" },
       {
@@ -48,14 +52,22 @@ export const getOrderStats = async (req, res) => {
           title: { $first: "$cartItems.title" },
           image: { $first: "$cartItems.image" },
           totalQty: { $sum: "$cartItems.quantity" },
+          // FIX: Convert price from string to a double/number before multiplying
           totalSales: {
-            $sum: { $multiply: ["$cartItems.quantity", "$cartItems.price"] },
+            $sum: {
+              $multiply: [
+                "$cartItems.quantity",
+                { $toDouble: "$cartItems.price" }, // <-- THIS IS THE FIX
+              ],
+            },
           },
         },
       },
       { $sort: { totalQty: -1 } },
       { $limit: 5 },
     ]);
+
+    console.log("Top products aggregation successful:", topProducts); // Debug log
 
     // Combine the stats and top products into a single response
     const finalStats = {
@@ -68,10 +80,12 @@ export const getOrderStats = async (req, res) => {
       data: finalStats,
     });
   } catch (error) {
-    console.error("❌ getOrderStats error:", error);
+    console.error("❌ getOrderStats error:", error); // This log is your best friend!
     res.status(500).json({
       success: false,
       message: "Failed to fetch order stats",
+      // Optional: include the error message in development for easier debugging
+      // error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
