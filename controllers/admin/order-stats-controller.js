@@ -20,6 +20,13 @@ const getDateRanges = () => {
 // ✅ 1️⃣ Get Order Statistics (Ultra-Defensive & Fully Dynamic)
 export const getOrderStats = async (req, res) => {
   try {
+     // ✅ ADD THIS DEBUG BLOCK AT THE TOP
+    console.log("🔍 DEBUG: Checking last 5 order statuses...");
+    const recentOrders = await Order.find().sort({ createdAt: -1 }).limit(5);
+    recentOrders.forEach(order => {
+      console.log(`Order ID: ${order._id}, Status: "${order.orderStatus}", Payment: "${order.paymentStatus}"`);
+    });
+    console.log("🔍 END DEBUG BLOCK");
     const { startOfThisWeek, startOfLastWeek, startOfCurrentMonth, startOfLastMonth, endOfLastMonth } = getDateRanges();
 
     // Initialize default values
@@ -68,6 +75,7 @@ export const getOrderStats = async (req, res) => {
       if (last > 0) {
         finalStats.revenueGrowthPercentage = ((current - last) / last * 100).toFixed(2);
       }
+      console.log(`🔍 Revenue Debug: Current Month Revenue = ${current}, Last Month Revenue = ${last}`);
     } catch (e) { console.error("Failed to get revenue:", e.message); }
 
     // --- 3. Pending Orders & Weekly Change ---
