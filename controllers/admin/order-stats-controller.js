@@ -1,119 +1,112 @@
 import Order from "../../models/Order.js";
 import mongoose from "mongoose";
 
-// ✅ 1️⃣ Get Order Statistics (More Robust Version)
+// Get Order Statistics (with Revenue Growth)
 export const getOrderStats = async (req, res) => {
   try {
-    console.log("🔍 [DEBUG] Attempting to fetch order stats...");
+    const now = new Date();
+    const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0); // Last day of last month
 
-    let stats = null;
-    let topProducts = [];
+    // --- Get general stats ---
+    const statsAgg = await Order.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalOrders: { $sum: 1 },
+          totalRevenue: {
+            $sum: {
+              $cond: [{ $eq: ["$orderStatus", "Delivered"] }, "$totalAmount", 0],
+            },
+          },
+          pendingOrders: {
+            $sum: { $cond: [{ $eq: ["$orderStatus", "Pending"] }, 1, 0] },
+          },
+          deliveredOrders: {
+            $sum: { $cond: [{ $eq: ["$orderStatus", "Delivered"] }, 1, 0] },
+          },
+          totalCustomers: { $addToSet: "$userId" },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          totalOrders: 1,
+          totalRevenue: 1,
+          pendingOrders: 1,
+          deliveredOrders: 1,
+          totalCustomers: { $size: "$totalCustomers" },
+        },
+      },
+    ]);
 
-    // --- Try to get general stats ---
-    try {
-      console.log("🔍 [DEBUG] Running general stats aggregation...");
-      const statsResult = await Order.aggregate([
-        {
-          $group: {
-            _id: null,
-            totalOrders: { $sum: 1 },
-            totalRevenue: {
-              $sum: {
-                $cond: [{ $eq: ["$orderStatus", "Delivered"] }, "$totalAmount", 0],
-              },
-            },
-            pendingOrders: {
-              $sum: { $cond: [{ $eq: ["$orderStatus", "Pending"] }, 1, 0] },
-            },
-            deliveredOrders: {
-              $sum: { $cond: [{ $eq: ["$orderStatus", "Delivered"] }, 1, 0] },
-            },
-            totalCustomers: { $addToSet: "$userId" },
-          },
-        },
-        {
-          $project: {
-            _id: 0,
-            totalOrders: 1,
-            totalRevenue: 1,
-            pendingOrders: 1,
-            deliveredOrders: 1,
-            totalCustomers: { $size: "$totalCustomers" },
-          },
-        },
-      ]);
-      stats = statsResult[0];
-      console.log("✅ [DEBUG] General stats fetched successfully:", stats);
-    } catch (statsError) {
-      console.error("❌ [ERROR] Failed to fetch general stats:", statsError);
+    // --- Get revenue for current and last month for growth calculation ---
+    const [currentMonthRevenue, lastMonthRevenue] = await Promise.all([
+      Order.aggregate([
+        { $match: { orderDate: { $gte: startOfCurrentMonth }, orderStatus: "Delivered" } },
+        { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+      ]),
+      Order.aggregate([
+        { $match: { orderDate: { $gte: startOfLastMonth, $lte: endOfLastMonth }, orderStatus: "Delivered" } },
+        { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+      ]),
+    ]);
+
+    const current = currentMonthRevenue[0]?.total || 0;
+    const last = lastMonthRevenue[0]?.total || 0;
+    let revenueGrowthPercentage = 0;
+    if (last > 0) {
+      revenueGrowthPercentage = ((current - last) / last) * 100;
     }
 
-    // --- Try to get top products ---
-    try {
-      console.log("🔍 [DEBUG] Running top products aggregation...");
-      // Add a $match stage to filter out documents with invalid price data
-      const topProductsResult = await Order.aggregate([
-        {
-          $match: {
-            "cartItems.price": { $exists: true, $type: "string", $ne: "" }, // Ensure price is a non-empty string
-          },
-        },
-        { $unwind: "$cartItems" },
-        {
-          $group: {
-            _id: "$cartItems.productId",
-            title: { $first: "$cartItems.title" },
-            image: { $first: "$cartItems.image" },
-            totalQty: { $sum: "$cartItems.quantity" },
-            totalSales: {
-              $sum: {
-                $multiply: [
-                  "$cartItems.quantity",
-                  { $toDouble: { $ifNull: ["$cartItems.price", "0"] } }, // Safely convert to number
-                ],
-              },
+    // --- Get top products (using the robust version from before) ---
+    const topProducts = await Order.aggregate([
+      { $unwind: "$cartItems" },
+      {
+        $addFields: {
+          cleanPrice: {
+            $replaceAll: {
+              input: { $replaceAll: { input: "$cartItems.price", find: "$", replacement: "" } },
+              find: "₹",
+              replacement: "",
             },
           },
         },
-        { $sort: { totalQty: -1 } },
-        { $limit: 5 },
-      ]);
-      topProducts = topProductsResult;
-      console.log("✅ [DEBUG] Top products fetched successfully:", topProducts);
-    } catch (productsError) {
-      console.error("❌ [ERROR] Failed to fetch top products:", productsError);
-    }
-
-    // If both failed, return an error
-    if (!stats && topProducts.length === 0) {
-      throw new Error("Failed to fetch all dashboard data components.");
-    }
+      },
+      {
+        $group: {
+          _id: "$cartItems.productId",
+          title: { $first: "$cartItems.title" },
+          image: { $first: "$cartItems.image" },
+          totalQty: { $sum: "$cartItems.quantity" },
+          totalSales: {
+            $sum: {
+              $multiply: [
+                "$cartItems.quantity",
+                { $cond: { if: { $ne: ["$cleanPrice", ""] }, then: { $toDouble: "$cleanPrice" }, else: 0 } },
+              ],
+            },
+          },
+        },
+      },
+      { $sort: { totalQty: -1 } },
+      { $limit: 5 },
+    ]);
 
     const finalStats = {
-      totalOrders: stats?.totalOrders || 0,
-      totalRevenue: stats?.totalRevenue || 0,
-      pendingOrders: stats?.pendingOrders || 0,
-      deliveredOrders: stats?.deliveredOrders || 0,
-      totalCustomers: stats?.totalCustomers || 0,
+      ...statsAgg[0],
+      revenueGrowthPercentage: revenueGrowthPercentage.toFixed(2), // Round to 2 decimal places
       topProducts,
     };
 
-    console.log("✅ [DEBUG] Final stats compiled:", finalStats);
-    res.json({
-      success: true,
-      data: finalStats,
-    });
+    res.json({ success: true, data: finalStats });
   } catch (error) {
-    // This is the most important log for you to find!
     console.error("❌ [CRITICAL ERROR] in getOrderStats:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch order stats",
-    });
+    res.status(500).json({ success: false, message: "Failed to fetch order stats" });
   }
 };
-
-// ✅ 2️⃣ Get Sales Overview for Recharts
+//  Get Sales Overview for Recharts
 export const getSalesOverview = async (req, res) => {
   try {
     console.log("🔍 [DEBUG] Attempting to fetch sales overview...");
