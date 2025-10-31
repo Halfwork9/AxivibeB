@@ -1,13 +1,42 @@
+// src/controllers/admin/order-stats-controller.js
+
 import Order from "../../models/Order.js";
 import mongoose from "mongoose";
 
-// Get Order Statistics (with Revenue Growth)
+// ✅ 1️⃣ Get Order Statistics (Robust Version)
 export const getOrderStats = async (req, res) => {
   try {
     const now = new Date();
     const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0); // Last day of last month
+
+    let revenueGrowthPercentage = 0;
+
+    // --- Safely calculate revenue growth ---
+    try {
+      const [currentMonthRevenue, lastMonthRevenue] = await Promise.all([
+        Order.aggregate([
+          { $match: { orderDate: { $gte: startOfCurrentMonth }, orderStatus: "Delivered" } },
+          { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+        ]),
+        Order.aggregate([
+          { $match: { orderDate: { $gte: startOfLastMonth, $lte: endOfLastMonth }, orderStatus: "Delivered" } },
+          { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+        ]),
+      ]);
+
+      const current = currentMonthRevenue[0]?.total || 0;
+      const last = lastMonthRevenue[0]?.total || 0;
+
+      if (last > 0) {
+        revenueGrowthPercentage = ((current - last) / last) * 100;
+      }
+      console.log("✅ Revenue growth calculated successfully.");
+    } catch (growthError) {
+      console.error("❌ Could not calculate revenue growth, defaulting to 0:", growthError.message);
+      // The variable remains 0, which is a safe default
+    }
 
     // --- Get general stats ---
     const statsAgg = await Order.aggregate([
@@ -41,26 +70,7 @@ export const getOrderStats = async (req, res) => {
       },
     ]);
 
-    // --- Get revenue for current and last month for growth calculation ---
-    const [currentMonthRevenue, lastMonthRevenue] = await Promise.all([
-      Order.aggregate([
-        { $match: { orderDate: { $gte: startOfCurrentMonth }, orderStatus: "Delivered" } },
-        { $group: { _id: null, total: { $sum: "$totalAmount" } } },
-      ]),
-      Order.aggregate([
-        { $match: { orderDate: { $gte: startOfLastMonth, $lte: endOfLastMonth }, orderStatus: "Delivered" } },
-        { $group: { _id: null, total: { $sum: "$totalAmount" } } },
-      ]),
-    ]);
-
-    const current = currentMonthRevenue[0]?.total || 0;
-    const last = lastMonthRevenue[0]?.total || 0;
-    let revenueGrowthPercentage = 0;
-    if (last > 0) {
-      revenueGrowthPercentage = ((current - last) / last) * 100;
-    }
-
-    // --- Get top products (using the robust version from before) ---
+    // --- Get top products (robust version) ---
     const topProducts = await Order.aggregate([
       { $unwind: "$cartItems" },
       {
@@ -96,7 +106,7 @@ export const getOrderStats = async (req, res) => {
 
     const finalStats = {
       ...statsAgg[0],
-      revenueGrowthPercentage: revenueGrowthPercentage.toFixed(2), // Round to 2 decimal places
+      revenueGrowthPercentage: revenueGrowthPercentage.toFixed(2),
       topProducts,
     };
 
@@ -106,10 +116,10 @@ export const getOrderStats = async (req, res) => {
     res.status(500).json({ success: false, message: "Failed to fetch order stats" });
   }
 };
-//  Get Sales Overview for Recharts
+
+// ✅ 2️⃣ Get Sales Overview for Recharts
 export const getSalesOverview = async (req, res) => {
   try {
-    console.log("🔍 [DEBUG] Attempting to fetch sales overview...");
     const today = new Date();
     const last30Days = new Date();
     last30Days.setDate(today.getDate() - 30);
@@ -136,7 +146,6 @@ export const getSalesOverview = async (req, res) => {
       orders: d.orders,
     }));
 
-    console.log("✅ [DEBUG] Sales overview fetched:", formatted);
     res.json({ success: true, data: formatted });
   } catch (error) {
     console.error("❌ [CRITICAL ERROR] in getSalesOverview:", error);
