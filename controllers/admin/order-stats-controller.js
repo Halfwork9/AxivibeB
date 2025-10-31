@@ -108,7 +108,7 @@ export const getOrderStats = async (req, res) => {
       finalStats.customersChange.percentage = lastWeekCount > 0 ? ((diff / lastWeekCount) * 100).toFixed(2) : 0;
     } catch (e) { console.error("Failed to get customer counts:", e.message); }
 
-    // --- 6. Top 5 Selling Products ---
+    // --- 6. Top 5 Selling Products (FIXED) ---
     try {
       const topProducts = await Order.aggregate([
         { $unwind: "$cartItems" },
@@ -116,8 +116,16 @@ export const getOrderStats = async (req, res) => {
           $addFields: {
             cleanPrice: {
               $replaceAll: {
-                input: { $replaceAll: { input: "$cartItems.price", find: "$", replacement: "" } },
-                find: "₹",
+                input: {
+                  $replaceAll: {
+                    input: "$cartItems.price",
+                    // ✅ FIX: Use $literal to treat '$' as a literal string
+                    find: { $literal: "$" },
+                    replacement: "",
+                  },
+                },
+                // ✅ FIX: Also use $literal for consistency
+                find: { $literal: "₹" },
                 replacement: "",
               },
             },
