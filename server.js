@@ -1,3 +1,4 @@
+// server.js
 import express from "express";
 import mongoose from "mongoose";
 import cookieParser from "cookie-parser";
@@ -7,6 +8,8 @@ import bodyParser from "body-parser";
 import helmet from "helmet";
 import axios from "axios";
 import path from "path";
+import { fileURLToPath } from "url";
+import history from "connect-history-api-fallback";
 
 // --- Routes ---
 import brandRoutes from "./routes/admin/brand-routes.js";
@@ -28,6 +31,10 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
+
+// Fix for __dirname in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // --- Serve uploads folder with proper CORS headers ---
 app.use(
@@ -146,10 +153,18 @@ app.use("/api/shop/products", shopProductsRouter);
 app.use(express.static(path.join(__dirname, "dist")));
 
 // Handle client-side routing
-// --- Handle client-side routing ---
-app.get("/shop/*", (req, res) => {
-  res.sendFile(path.join(__dirname, "dist", "index.html"));
-});
+app.use(
+  history({
+    rewrites: [
+      {
+        from: /^\/shop\/.*$/,
+        to: function(context) {
+          return context.parsedUrl.pathname;
+        }
+      }
+    ]
+  })
+);
 
 // For any other request, serve the index.html
 app.get("*", (req, res) => {
