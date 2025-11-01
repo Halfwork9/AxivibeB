@@ -4,6 +4,7 @@ import {
   stripeWebhook,
   getAllOrdersByUser,
   getOrderDetails,
+  verifyStripePayment,
 } from "../../controllers/shop/order-controller.js";
 
 const router = express.Router();
@@ -21,5 +22,6 @@ router.post(
 // Orders
 router.get("/list/:userId", getAllOrdersByUser);
 router.get("/details/:id", getOrderDetails);
+router.post("/verify-payment", verifyStripePayment);
 
 export default router;
