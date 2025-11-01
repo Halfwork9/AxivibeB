@@ -123,57 +123,79 @@ export const createOrder = async (req, res) => {
 
 //  Webhook to confirm payment (No changes needed here)
 export const stripeWebhook = async (req, res) => {
-  let event;
+  let event;
 
-  try {
-    const sig = req.headers["stripe-signature"];
-    event = stripe.webhooks.constructEvent(
-      req.body,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET
-    );
-  } catch (err) {
-    console.error("⚠️ Webhook signature verification failed:", err.message);
-    return res.sendStatus(400);
-  }
+  try {
+    const sig = req.headers["stripe-signature"];
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
+  } catch (err) {
+    console.error("⚠️ Webhook signature verification failed:", err.message);
+    return res.sendStatus(400);
+  }
 
-  // Handle event
-  if (event.type === "checkout.session.completed") {
-    const session = event.data.object;
-    const orderId = session.metadata.orderId;
+  //  ADD LOG: Log the received event type
+  console.log(`🔔 Webhook received: ${event.type}`);
 
-    try {
-      const order = await Order.findById(orderId);
-      if (!order) return;
+  // Handle the event
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object;
+    const orderId = session.metadata.orderId;
 
-      order.paymentStatus = "paid";
-      order.orderStatus = "confirmed";
-      order.paymentId = session.payment_intent;
-      order.orderUpdateDate = new Date();
+    //  ADD LOG: Log the orderId from the metadata
+    console.log(`🔔 Processing payment for Order ID: ${orderId}`);
 
-      // Decrease stock for each product
-      for (let item of order.cartItems) {
-        let product = await Product.findById(item.productId);
-        if (product) {
-          product.totalStock -= item.quantity;
-          await product.save();
-        }
-      }
+    try {
+      const order = await Order.findById(orderId);
 
-      // Delete cart
-      await Cart.findByIdAndDelete(order.cartId);
+      //  ADD LOG: Check if the order was found
+      if (!order) {
+        console.error(`❌ Order not found for ID: ${orderId}`);
+        return res.status(404).json({ error: "Order not found" });
+      }
 
-      await order.save();
-      console.log(`✅ Order ${orderId} confirmed.`);
-    } catch (err) {
-      console.error("Error updating order after payment:", err);
-    }
-  }
+      //  ADD LOG: Check if the order is already paid to prevent duplicate processing
+      if (order.paymentStatus === 'paid') {
+        console.log(`ℹ️ Order ${orderId} is already marked as paid. Skipping.`);
+        return res.json({ received: true });
+      }
+      
+      // Update the order
+      order.paymentStatus = "paid";
+      order.orderStatus = "confirmed"; // Or "processing" if you have that state
+      order.paymentId = session.payment_intent;
+      order.orderUpdateDate = new Date();
 
-  res.json({ received: true });
+      // Decrease stock for each product
+      for (const item of order.cartItems) {
+        await Product.findByIdAndUpdate(item.productId, {
+          $inc: { totalStock: -item.quantity },
+        });
+      }
+
+      // Delete cart
+      await Cart.findByIdAndDelete(order.cartId);
+
+      await order.save();
+
+      //  ADD LOG: Confirm success
+      console.log(`✅ Order ${orderId} payment confirmed and status updated.`);
+      
+    } catch (err) {
+      console.error(`❌ Error updating order ${orderId} after payment:`, err);
+      // It's important to still return a 200 to Stripe to avoid retries
+      // but we should log the error for manual intervention.
+    }
+  }
+
+  // Return a 200 response to acknowledge receipt of the event
+  res.json({ received: true });
 };
 
-// ✅ NEW: Fallback function to verify payment from the success page
+//  NEW: Fallback function to verify payment from the success page
 export const verifyStripePayment = async (req, res) => {
   const { orderId } = req.body;
 
