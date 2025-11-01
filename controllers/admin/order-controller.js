@@ -112,3 +112,54 @@ export const updateOrderStatus = async (req, res) => {
     res.status(500).json({ success: false, message: "Some error occurred!" });
   }
 };
+
+// ✅ NEW: Add the updatePaymentStatus function
+export const updatePaymentStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { paymentStatus } = req.body;
+
+    // Validate the new status
+    const allowedStatuses = ['paid', 'pending', 'failed', 'refunded'];
+    if (!allowedStatuses.includes(paymentStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment status provided.",
+      });
+    }
+
+    const order = await Order.findById(id);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found.",
+      });
+    }
+
+    // Optional: Add a business logic check
+    // For example, only allow marking as 'paid' if it was a COD order and is already delivered.
+    if (order.paymentMethod !== 'Cash on Delivery') {
+      return res.status(400).json({
+        success: false,
+        message: "This action is only applicable for Cash on Delivery orders.",
+      });
+    }
+
+    order.paymentStatus = paymentStatus;
+    await order.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Payment status updated to ${paymentStatus}.`,
+      data: order, // Send back the updated order
+    });
+
+  } catch (error) {
+    console.error("Error updating payment status:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update payment status.",
+    });
+  }
+};
