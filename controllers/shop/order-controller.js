@@ -99,8 +99,8 @@ export const createOrder = async (req, res) => {
           },
           quantity: item.quantity,
         })),
-        success_url: `https://axivibe-vojm.vercel.app/shop/payment-success?orderId=${newOrder._id}`,
-        cancel_url: `https://axivibe-vojm.vercel.app/shop/payment-cancel`,
+        success_url: `https://nikhilmamdekar.site/shop/payment-success?orderId=${newOrder._id}`,
+        cancel_url: `https://nikhilmamdekar.site/shop/payment-cancel`,
         metadata: {
           orderId: newOrder._id.toString(),
         },
