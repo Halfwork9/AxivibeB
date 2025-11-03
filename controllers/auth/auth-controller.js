@@ -248,6 +248,9 @@ export const logoutUser = (req, res) => {
 };
 // AUTH MIDDLEWARE
 export const authMiddleware = (req, res, next) => {
+  console.log("AUTH MIDDLEWARE CALLED");
+  console.log("HEADERS:", req.headers.authorization);
+  console.log("COOKIES:", req.cookies);
   let token =
     req.cookies?.token ||
     (req.headers.authorization?.startsWith("Bearer ")
