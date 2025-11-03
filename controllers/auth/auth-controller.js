@@ -39,6 +39,7 @@ const sendTokenResponse = (res, user, message) => {
   return res.json({
     success: true,
     message,
+    token,
     user: {
       id: user._id,
       email: user.email,
@@ -142,6 +143,7 @@ export const googleLogin = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Google login successful",
+      token: authToken,
       user: {
         id: user._id,
         email: user.email,
