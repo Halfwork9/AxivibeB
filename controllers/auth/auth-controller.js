@@ -32,7 +32,7 @@ const sendTokenResponse = (res, user, message) => {
       email: user.email,
       userName: user.userName,
     },
-    process.env.JWT_SECRET || "CLIENT_SECRET_KEY",
+    process.env.JWT_SECRET,
     { expiresIn: "7d" }
   );
   setAuthCookie(res, token);
@@ -248,28 +248,29 @@ export const logoutUser = (req, res) => {
 };
 // AUTH MIDDLEWARE
 export const authMiddleware = (req, res, next) => {
-  console.log("AUTH MIDDLEWARE CALLED");
-  console.log("HEADERS:", req.headers.authorization);
-  console.log("COOKIES:", req.cookies);
-  let token =
-    req.cookies?.token ||
-    (req.headers.authorization?.startsWith("Bearer ")
-      ? req.headers.authorization.split(" ")[1]
-      : null);
-  if (!token)
-    return res
-      .status(401)
-      .json({ success: false, message: "Unauthorized user!" });
+  console.log("AUTH MIDDLEWARE");
+  console.log("Header:", req.headers.authorization);
+  console.log("Cookies:", req.cookies?.token);
+
+  let token = null;
+
+  if (req.headers.authorization?.startsWith("Bearer ")) {
+    token = req.headers.authorization.split(" ")[1];
+  } else if (req.cookies?.token) {
+    token = req.cookies.token;
+  }
+
+  if (!token) {
+    return res.status(401).json({ success: false, message: "No token!" });
+  }
+
   try {
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET || "CLIENT_SECRET_KEY"
-    );
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;
+    console.log("TOKEN VALID → User ID:", decoded.id);
     next();
   } catch (err) {
-    return res
-      .status(401)
-      .json({ success: false, message: "Unauthorized user!" });
+    console.log("INVALID TOKEN:", err.message);
+    return res.status(401).json({ success: false, message: "Invalid token!" });
   }
-}; 
+};
