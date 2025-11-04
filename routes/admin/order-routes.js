@@ -4,11 +4,11 @@ import {
   getOrderDetailsForAdmin,
   updateOrderStatus,
    updatePaymentStatus,
+  debugOrderStatuses,
 } from "../../controllers/admin/order-controller.js";
 import {
   getOrderStats,
   getSalesOverview,
-  debugOrders,
 } from "../../controllers/admin/order-stats-controller.js";
 
 const router = express.Router();
@@ -22,6 +22,7 @@ router.get("/stats", getOrderStats);
 router.get("/sales-overview", getSalesOverview);
 router.put("/:id/payment-status", updatePaymentStatus);
 // In your admin order routes file
-router.get("/debug", debugOrders);
+// In your admin order routes file
+router.get("/debug-statuses", debugOrderStatuses);
 
 export default router;
