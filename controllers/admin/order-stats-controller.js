@@ -41,7 +41,18 @@ export const getOrderStats = async (req, res) => {
     // Debug: Check if orders exist and their statuses
     const allOrders = await Order.find({});
     console.log("All orders count:", allOrders.length);
-    console.log("Sample order statuses:", allOrders.slice(0, 5).map(o => ({ id: o._id, status: o.orderStatus, date: o.orderDate || o.createdAt })));
+    
+    // Get all unique status values
+    const allStatuses = [...new Set(allOrders.map(o => o.orderStatus))];
+    console.log("All unique order statuses:", allStatuses);
+    
+    // Check sample orders
+    console.log("Sample orders:", allOrders.slice(0, 5).map(o => ({ 
+      id: o._id, 
+      status: o.orderStatus, 
+      paymentStatus: o.paymentStatus,
+      date: o.orderDate || o.createdAt 
+    })));
 
     // --- 1. Total Orders & Weekly Change ---
     try {
@@ -107,20 +118,36 @@ export const getOrderStats = async (req, res) => {
 
     // --- 3. Pending Orders & Weekly Change ---
     try {
+      // First, let's check what statuses we have that might be considered "pending"
+      const pendingStatuses = await Order.aggregate([
+        { $match: { 
+          $or: [
+            { orderDate: { $gte: startOfThisWeek } },
+            { createdAt: { $gte: startOfThisWeek } }
+          ]
+        }},
+        { $group: { _id: "$orderStatus", count: { $sum: 1 } } },
+        { $sort: { count: -1 } }
+      ]);
+      console.log("Order statuses this week:", pendingStatuses);
+      
+      // Try multiple possible pending status values
+      const possiblePendingStatuses = ["pending", "Pending", "PENDING", "processing", "Processing", "PROCESSING"];
+      
       const [thisWeekPending, lastWeekPending] = await Promise.all([
         Order.countDocuments({ 
           $or: [
             { orderDate: { $gte: startOfThisWeek } },
             { createdAt: { $gte: startOfThisWeek } }
           ],
-          $expr: { $eq: [{ $toLower: "$orderStatus" }, "pending"] } 
+          orderStatus: { $in: possiblePendingStatuses }
         }),
         Order.countDocuments({ 
           $or: [
             { orderDate: { $gte: startOfLastWeek, $lt: startOfThisWeek } },
             { createdAt: { $gte: startOfLastWeek, $lt: startOfThisWeek } }
           ],
-          $expr: { $eq: [{ $toLower: "$orderStatus" }, "pending"] } 
+          orderStatus: { $in: possiblePendingStatuses }
         }),
       ]);
       finalStats.pendingOrders = thisWeekPending;
@@ -132,20 +159,36 @@ export const getOrderStats = async (req, res) => {
 
     // --- 4. Delivered Orders & Weekly Change ---
     try {
+      // First, let's check what statuses we have that might be considered "delivered"
+      const deliveredStatuses = await Order.aggregate([
+        { $match: { 
+          $or: [
+            { orderDate: { $gte: startOfThisWeek } },
+            { createdAt: { $gte: startOfThisWeek } }
+          ]
+        }},
+        { $group: { _id: "$orderStatus", count: { $sum: 1 } } },
+        { $sort: { count: -1 } }
+      ]);
+      console.log("Order statuses this week:", deliveredStatuses);
+      
+      // Try multiple possible delivered status values
+      const possibleDeliveredStatuses = ["delivered", "Delivered", "DELIVERED", "completed", "Completed", "COMPLETED"];
+      
       const [thisWeekDelivered, lastWeekDelivered] = await Promise.all([
         Order.countDocuments({ 
           $or: [
             { orderDate: { $gte: startOfThisWeek } },
             { createdAt: { $gte: startOfThisWeek } }
           ],
-          $expr: { $eq: [{ $toLower: "$orderStatus" }, "delivered"] } 
+          orderStatus: { $in: possibleDeliveredStatuses }
         }),
         Order.countDocuments({ 
           $or: [
             { orderDate: { $gte: startOfLastWeek, $lt: startOfThisWeek } },
             { createdAt: { $gte: startOfLastWeek, $lt: startOfThisWeek } }
           ],
-          $expr: { $eq: [{ $toLower: "$orderStatus" }, "delivered"] } 
+          orderStatus: { $in: possibleDeliveredStatuses }
         }),
       ]);
       finalStats.deliveredOrders = thisWeekDelivered;
@@ -265,36 +308,5 @@ export const getSalesOverview = async (req, res) => {
       success: false,
       message: "Failed to fetch sales overview",
     });
-  }
-};
-
-// Add this to your admin order routes (router.get("/debug", ...))
-
-export const debugOrders = async (req, res) => {
-  try {
-    const orders = await Order.find({});
-    const statusCounts = {};
-    
-    orders.forEach(order => {
-      const status = order.orderStatus?.toLowerCase();
-      statusCounts[status] = (statusCounts[status] || 0) + 1;
-    });
-    
-    res.json({ 
-      success: true, 
-      data: {
-        totalOrders: orders.length,
-        statusCounts,
-        sampleOrders: orders.slice(0, 5).map(o => ({
-          id: o._id,
-          status: o.orderStatus,
-          paymentStatus: o.paymentStatus,
-          date: o.orderDate || o.createdAt
-        }))
-      }
-    });
-  } catch (error) {
-    console.error("Debug orders error:", error);
-    res.status(500).json({ success: false, message: "Failed to debug orders" });
   }
 };
