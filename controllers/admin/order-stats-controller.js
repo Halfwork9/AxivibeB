@@ -132,7 +132,7 @@ export const getOrderStats = async (req, res) => {
       console.log("Order statuses this week:", pendingStatuses);
       
       // Try multiple possible pending status values
-      const possiblePendingStatuses = ["pending", "Pending", "PENDING", "processing", "Processing", "PROCESSING"];
+      const possiblePendingStatuses = ["pending", "Pending", "PENDING", "processing", "Processing", "PROCESSING","confirmed", "Confirmed", "CONFIRMED"];
       
       const [thisWeekPending, lastWeekPending] = await Promise.all([
         Order.countDocuments({ 
@@ -151,9 +151,11 @@ export const getOrderStats = async (req, res) => {
         }),
       ]);
       finalStats.pendingOrders = thisWeekPending;
-      const diff = thisWeekPending - lastWeekPending;
-      finalStats.pendingChange.value = diff;
-      finalStats.pendingChange.percentage = lastWeekPending > 0 ? ((diff / lastWeekPending) * 100).toFixed(2) : 0;
+  const diff = thisWeekPending - lastWeekPending;
+  finalStats.pendingChange.value = diff;
+  finalStats.pendingChange.percentage = lastWeekPending > 0 
+    ? ((diff / lastWeekPending) * 100).toFixed(2) 
+    : thisWeekPending > 0 ? "100.00" : "0.00";
       console.log("This week pending:", thisWeekPending, "Last week pending:", lastWeekPending);
     } catch (e) { console.error("Failed to get pending counts:", e.message); }
 
@@ -173,7 +175,7 @@ export const getOrderStats = async (req, res) => {
       console.log("Order statuses this week:", deliveredStatuses);
       
       // Try multiple possible delivered status values
-      const possibleDeliveredStatuses = ["delivered", "Delivered", "DELIVERED", "completed", "Completed", "COMPLETED"];
+      const possibleDeliveredStatuses = ["delivered", "Delivered", "DELIVERED", "completed", "Completed", "COMPLETED","shipped", "Shipped", "SHIPPED"];
       
       const [thisWeekDelivered, lastWeekDelivered] = await Promise.all([
         Order.countDocuments({ 
@@ -192,10 +194,11 @@ export const getOrderStats = async (req, res) => {
         }),
       ]);
       finalStats.deliveredOrders = thisWeekDelivered;
-      const diff = thisWeekDelivered - lastWeekDelivered;
-      finalStats.deliveredChange.value = diff;
-      finalStats.deliveredChange.percentage = lastWeekDelivered > 0 ? ((diff / lastWeekDelivered) * 100).toFixed(2) : 0;
-      console.log("This week delivered:", thisWeekDelivered, "Last week delivered:", lastWeekDelivered);
+  const diff = thisWeekDelivered - lastWeekDelivered;
+  finalStats.deliveredChange.value = diff;
+  finalStats.deliveredChange.percentage = lastWeekDelivered > 0 
+    ? ((diff / lastWeekDelivered) * 100).toFixed(2) 
+    : thisWeekDelivered > 0 ? "100.00" : "0.00";
     } catch (e) { console.error("Failed to get delivered counts:", e.message); }
 
     // --- 5. Total Customers & Weekly Change ---
