@@ -267,3 +267,34 @@ export const getSalesOverview = async (req, res) => {
     });
   }
 };
+
+// Add this to your admin order routes (router.get("/debug", ...))
+
+export const debugOrders = async (req, res) => {
+  try {
+    const orders = await Order.find({});
+    const statusCounts = {};
+    
+    orders.forEach(order => {
+      const status = order.orderStatus?.toLowerCase();
+      statusCounts[status] = (statusCounts[status] || 0) + 1;
+    });
+    
+    res.json({ 
+      success: true, 
+      data: {
+        totalOrders: orders.length,
+        statusCounts,
+        sampleOrders: orders.slice(0, 5).map(o => ({
+          id: o._id,
+          status: o.orderStatus,
+          paymentStatus: o.paymentStatus,
+          date: o.orderDate || o.createdAt
+        }))
+      }
+    });
+  } catch (error) {
+    console.error("Debug orders error:", error);
+    res.status(500).json({ success: false, message: "Failed to debug orders" });
+  }
+};
