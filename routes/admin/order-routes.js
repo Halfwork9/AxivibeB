@@ -1,11 +1,13 @@
+// src/routes/admin/order.routes.js
 import express from "express";
 import {
   getAllOrdersOfAllUsers,
   getOrderDetailsForAdmin,
   updateOrderStatus,
-   updatePaymentStatus,
+  updatePaymentStatus,
   debugOrderStatuses,
 } from "../../controllers/admin/order-controller.js";
+
 import {
   getOrderStats,
   getSalesOverview,
@@ -13,16 +15,15 @@ import {
 
 const router = express.Router();
 
+// Existing admin order routes
 router.get("/get", getAllOrdersOfAllUsers);
 router.get("/details/:id", getOrderDetailsForAdmin);
 router.put("/update/:id", updateOrderStatus);
+router.put("/:id/payment-status", updatePaymentStatus);
+router.get("/debug-statuses", debugOrderStatuses);
 
-// 📊 New Analytics Routes
+// ────── NEW ANALYTICS ROUTES ──────
 router.get("/stats", getOrderStats);
 router.get("/sales-overview", getSalesOverview);
-router.put("/:id/payment-status", updatePaymentStatus);
-// In your admin order routes file
-// In your admin order routes file
-router.get("/debug-statuses", debugOrderStatuses);
 
 export default router;
