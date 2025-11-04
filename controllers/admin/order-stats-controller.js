@@ -37,6 +37,12 @@ export const getOrderStats = async (req, res) => {
       deliveredChange: { value: 0, percentage: 0 },
       customersChange: { value: 0, percentage: 0 },
     };
+    // In getOrderStats controller
+finalStats.confirmedOrders = await Order.countDocuments({ orderStatus: "confirmed" });
+finalStats.shippedOrders = await Order.countDocuments({ orderStatus: "shipped" });
+finalStats.lowStock = await Product.find({ totalStock: { $lt: 10 } })
+  .select("title totalStock")
+  .limit(5);
 
     // Debug: Check if orders exist and their statuses
     const allOrders = await Order.find({});
