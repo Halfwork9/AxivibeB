@@ -1,30 +1,50 @@
 // src/controllers/admin/order-stats-controller.js
-
 import Order from "../../models/Order.js";
+import Product from "../../models/Product.js";   // <-- NEW
 
-// Helper function to get date ranges
+// ──────────────────────────────────────────────────────────────
+// Helper: date ranges (this week, last week, current/last month)
+// ──────────────────────────────────────────────────────────────
 const getDateRanges = () => {
   const now = new Date();
+
+  // This week (Mon-Sun)
   const startOfThisWeek = new Date(now);
-  startOfThisWeek.setDate(now.getDate() - now.getDay());
+  startOfThisWeek.setDate(now.getDate() - now.getDay() + 1); // Monday
   startOfThisWeek.setHours(0, 0, 0, 0);
-  
+
   const startOfLastWeek = new Date(startOfThisWeek);
   startOfLastWeek.setDate(startOfLastWeek.getDate() - 7);
-  
+
+  // Current month
   const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
 
-  return { startOfThisWeek, startOfLastWeek, startOfCurrentMonth, startOfLastMonth, endOfLastMonth };
+  return {
+    startOfThisWeek,
+    startOfLastWeek,
+    startOfCurrentMonth,
+    startOfLastMonth,
+    endOfLastMonth,
+  };
 };
 
-// ✅ 1️⃣ Get Order Statistics (Case-Insensitive & Logic-Fixed)
+// ──────────────────────────────────────────────────────────────
+// 1. GET /admin/orders/stats
+// ──────────────────────────────────────────────────────────────
 export const getOrderStats = async (req, res) => {
   try {
-    const { startOfThisWeek, startOfLastWeek, startOfCurrentMonth, startOfLastMonth, endOfLastMonth } = getDateRanges();
+    const {
+      startOfThisWeek,
+      startOfLastWeek,
+      startOfCurrentMonth,
+      startOfLastMonth,
+      endOfLastMonth,
+    } = getDateRanges();
 
-    let finalStats = {
+    // ----- Default shape (never null) -----
+    const finalStats = {
       totalOrders: 0,
       totalRevenue: 0,
       pendingOrders: 0,
@@ -36,259 +56,193 @@ export const getOrderStats = async (req, res) => {
       pendingChange: { value: 0, percentage: 0 },
       deliveredChange: { value: 0, percentage: 0 },
       customersChange: { value: 0, percentage: 0 },
+      lowStock: [],
+      confirmedOrders: 0,
+      shippedOrders: 0,
     };
-    // In getOrderStats controller
-finalStats.confirmedOrders = await Order.countDocuments({ orderStatus: "confirmed" });
-finalStats.shippedOrders = await Order.countDocuments({ orderStatus: "shipped" });
-finalStats.lowStock = await Product.find({ totalStock: { $lt: 10 } })
-  .select("title totalStock")
-  .limit(5);
 
-    // Debug: Check if orders exist and their statuses
-    const allOrders = await Order.find({});
-    console.log("All orders count:", allOrders.length);
-    
-    // Get all unique status values
-    const allStatuses = [...new Set(allOrders.map(o => o.orderStatus))];
-    console.log("All unique order statuses:", allStatuses);
-    
-    // Check sample orders
-    console.log("Sample orders:", allOrders.slice(0, 5).map(o => ({ 
-      id: o._id, 
-      status: o.orderStatus, 
-      paymentStatus: o.paymentStatus,
-      date: o.orderDate || o.createdAt 
-    })));
+    // -------------------------------------------------
+    // 1. Confirmed & Shipped (extra counters)
+    // -------------------------------------------------
+    finalStats.confirmedOrders = await Order.countDocuments({ orderStatus: /confirmed/i });
+    finalStats.shippedOrders = await Order.countDocuments({ orderStatus: /shipped/i });
 
-    // --- 1. Total Orders & Weekly Change ---
-    try {
-      const [thisWeekOrders, lastWeekOrders] = await Promise.all([
-        Order.countDocuments({ 
-          $or: [
-            { orderDate: { $gte: startOfThisWeek } },
-            { createdAt: { $gte: startOfThisWeek } }
-          ]
-        }),
-        Order.countDocuments({ 
-          $or: [
-            { orderDate: { $gte: startOfLastWeek, $lt: startOfThisWeek } },
-            { createdAt: { $gte: startOfLastWeek, $lt: startOfThisWeek } }
-          ]
-        }),
-      ]);
-      finalStats.totalOrders = thisWeekOrders;
-      const diff = thisWeekOrders - lastWeekOrders;
-      finalStats.ordersChange.value = diff;
-      finalStats.ordersChange.percentage = lastWeekOrders > 0 ? ((diff / lastWeekOrders) * 100).toFixed(2) : 0;
-      console.log("This week orders:", thisWeekOrders, "Last week orders:", lastWeekOrders);
-    } catch (e) { console.error("Failed to get order counts:", e.message); }
+    // -------------------------------------------------
+    // 2. Low-stock products (max 5)
+    // -------------------------------------------------
+    finalStats.lowStock = await Product.find({ totalStock: { $lt: 10 } })
+      .select("title totalStock")
+      .limit(5)
+      .lean();
 
-    // --- 2. Total Revenue & Monthly Growth ---
-    try {
-      const [currentMonthRevenue, lastMonthRevenue] = await Promise.all([
-        Order.aggregate([
-          { 
-            $match: { 
-              $or: [
-                { orderDate: { $gte: startOfCurrentMonth } },
-                { createdAt: { $gte: startOfCurrentMonth } }
-              ],
-              $expr: { $in: [{ $toLower: "$orderStatus" }, ["delivered", "confirmed"]] }, 
-              $expr: { $eq: [{ $toLower: "$paymentStatus" }, "paid"] } 
-            } 
-          },
-          { $group: { _id: null, total: { $sum: "$totalAmount" } } },
-        ]),
-        Order.aggregate([
-          { 
-            $match: { 
-              $or: [
-                { orderDate: { $gte: startOfLastMonth, $lte: endOfLastMonth } },
-                { createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } }
-              ],
-              $expr: { $in: [{ $toLower: "$orderStatus" }, ["delivered", "confirmed"]] }, 
-              $expr: { $eq: [{ $toLower: "$paymentStatus" }, "paid"] } 
-            } 
-          },
-          { $group: { _id: null, total: { $sum: "$totalAmount" } } },
-        ]),
-      ]);
-      finalStats.totalRevenue = currentMonthRevenue[0]?.total || 0;
-      const current = finalStats.totalRevenue;
-      const last = lastMonthRevenue[0]?.total || 0;
-      if (last > 0) {
-        finalStats.revenueGrowthPercentage = ((current - last) / last * 100).toFixed(2);
-      }
-      console.log("Current month revenue:", current, "Last month revenue:", last);
-    } catch (e) { console.error("Failed to get revenue:", e.message); }
+    // -------------------------------------------------
+    // 3. Total orders (this week) + change
+    // -------------------------------------------------
+    const [thisWeekOrders, lastWeekOrders] = await Promise.all([
+      Order.countDocuments({
+        $or: [{ orderDate: { $gte: startOfThisWeek } }, { createdAt: { $gte: startOfThisWeek } }],
+      }),
+      Order.countDocuments({
+        $or: [
+          { orderDate: { $gte: startOfLastWeek, $lt: startOfThisWeek } },
+          { createdAt: { $gte: startOfLastWeek, $lt: startOfThisWeek } },
+        ],
+      }),
+    ]);
+    finalStats.totalOrders = thisWeekOrders;
+    const ordersDiff = thisWeekOrders - lastWeekOrders;
+    finalStats.ordersChange.value = ordersDiff;
+    finalStats.ordersChange.percentage =
+      lastWeekOrders > 0 ? ((ordersDiff / lastWeekOrders) * 100).toFixed(2) : 0;
 
-    // --- 3. Pending Orders & Weekly Change ---
-    try {
-      // First, let's check what statuses we have that might be considered "pending"
-      const pendingStatuses = await Order.aggregate([
-        { $match: { 
-          $or: [
-            { orderDate: { $gte: startOfThisWeek } },
-            { createdAt: { $gte: startOfThisWeek } }
-          ]
-        }},
-        { $group: { _id: "$orderStatus", count: { $sum: 1 } } },
-        { $sort: { count: -1 } }
-      ]);
-      console.log("Order statuses this week:", pendingStatuses);
-      
-      // Try multiple possible pending status values
-      const possiblePendingStatuses = ["pending", "Pending", "PENDING", "processing", "Processing", "PROCESSING","confirmed", "Confirmed", "CONFIRMED"];
-      
-      const [thisWeekPending, lastWeekPending] = await Promise.all([
-        Order.countDocuments({ 
-          $or: [
-            { orderDate: { $gte: startOfThisWeek } },
-            { createdAt: { $gte: startOfThisWeek } }
-          ],
-          orderStatus: { $in: possiblePendingStatuses }
-        }),
-        Order.countDocuments({ 
-          $or: [
-            { orderDate: { $gte: startOfLastWeek, $lt: startOfThisWeek } },
-            { createdAt: { $gte: startOfLastWeek, $lt: startOfThisWeek } }
-          ],
-          orderStatus: { $in: possiblePendingStatuses }
-        }),
-      ]);
-      finalStats.pendingOrders = thisWeekPending;
-  const diff = thisWeekPending - lastWeekPending;
-  finalStats.pendingChange.value = diff;
-  finalStats.pendingChange.percentage = lastWeekPending > 0 
-    ? ((diff / lastWeekPending) * 100).toFixed(2) 
-    : thisWeekPending > 0 ? "100.00" : "0.00";
-      console.log("This week pending:", thisWeekPending, "Last week pending:", lastWeekPending);
-    } catch (e) { console.error("Failed to get pending counts:", e.message); }
-
-    // --- 4. Delivered Orders & Weekly Change ---
-    try {
-      // First, let's check what statuses we have that might be considered "delivered"
-      const deliveredStatuses = await Order.aggregate([
-        { $match: { 
-          $or: [
-            { orderDate: { $gte: startOfThisWeek } },
-            { createdAt: { $gte: startOfThisWeek } }
-          ]
-        }},
-        { $group: { _id: "$orderStatus", count: { $sum: 1 } } },
-        { $sort: { count: -1 } }
-      ]);
-      console.log("Order statuses this week:", deliveredStatuses);
-      
-      // Try multiple possible delivered status values
-      const possibleDeliveredStatuses = ["delivered", "Delivered", "DELIVERED", "completed", "Completed", "COMPLETED","shipped", "Shipped", "SHIPPED"];
-      
-      const [thisWeekDelivered, lastWeekDelivered] = await Promise.all([
-        Order.countDocuments({ 
-          $or: [
-            { orderDate: { $gte: startOfThisWeek } },
-            { createdAt: { $gte: startOfThisWeek } }
-          ],
-          orderStatus: { $in: possibleDeliveredStatuses }
-        }),
-        Order.countDocuments({ 
-          $or: [
-            { orderDate: { $gte: startOfLastWeek, $lt: startOfThisWeek } },
-            { createdAt: { $gte: startOfLastWeek, $lt: startOfThisWeek } }
-          ],
-          orderStatus: { $in: possibleDeliveredStatuses }
-        }),
-      ]);
-      finalStats.deliveredOrders = thisWeekDelivered;
-  const diff = thisWeekDelivered - lastWeekDelivered;
-  finalStats.deliveredChange.value = diff;
-  finalStats.deliveredChange.percentage = lastWeekDelivered > 0 
-    ? ((diff / lastWeekDelivered) * 100).toFixed(2) 
-    : thisWeekDelivered > 0 ? "100.00" : "0.00";
-    } catch (e) { console.error("Failed to get delivered counts:", e.message); }
-
-    // --- 5. Total Customers & Weekly Change ---
-    try {
-      const [thisWeekCustomers, lastWeekCustomers] = await Promise.all([
-        Order.distinct("userId", { 
-          $or: [
-            { orderDate: { $gte: startOfThisWeek } },
-            { createdAt: { $gte: startOfThisWeek } }
-          ]
-        }),
-        Order.distinct("userId", { 
-          $or: [
-            { orderDate: { $gte: startOfLastWeek, $lt: startOfThisWeek } },
-            { createdAt: { $gte: startOfLastWeek, $lt: startOfThisWeek } }
-          ]
-        }),
-      ]);
-      const thisWeekCount = thisWeekCustomers.length;
-      const lastWeekCount = lastWeekCustomers.length;
-      finalStats.totalCustomers = thisWeekCount;
-      const diff = thisWeekCount - lastWeekCount;
-      finalStats.customersChange.value = diff;
-      finalStats.customersChange.percentage = lastWeekCount > 0 ? ((diff / lastWeekCount) * 100).toFixed(2) : 0;
-      console.log("This week customers:", thisWeekCount, "Last week customers:", lastWeekCount);
-    } catch (e) { console.error("Failed to get customer counts:", e.message); }
-
-    // --- 6. Top 5 Selling Products ---
-    try {
-      const topProducts = await Order.aggregate([
-        { $unwind: "$cartItems" },
+    // -------------------------------------------------
+    // 4. Revenue (current month) + growth
+    // -------------------------------------------------
+    const [currentMonthRevenue, lastMonthRevenue] = await Promise.all([
+      Order.aggregate([
         {
-          $addFields: {
-            cleanPrice: {
-              $replaceAll: {
-                input: {
-                  $replaceAll: { input: "$cartItems.price", find: { $literal: "$" }, replacement: "" },
-                },
-                find: { $literal: "₹" },
-                replacement: "",
-              },
-            },
+          $match: {
+            $or: [{ orderDate: { $gte: startOfCurrentMonth } }, { createdAt: { $gte: startOfCurrentMonth } }],
+            orderStatus: /delivered|confirmed/i,
+            paymentStatus: /paid/i,
           },
         },
+        { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+      ]),
+      Order.aggregate([
         {
-          $group: {
-            _id: "$cartItems.productId",
-            title: { $first: "$cartItems.title" },
-            image: { $first: "$cartItems.image" },
-            totalQty: { $sum: "$cartItems.quantity" },
+          $match: {
+            $or: [
+              { orderDate: { $gte: startOfLastMonth, $lte: endOfLastMonth } },
+              { createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } },
+            ],
+            orderStatus: /delivered|confirmed/i,
+            paymentStatus: /paid/i,
           },
         },
-        { $sort: { totalQty: -1 } },
-        { $limit: 5 },
-      ]);
-      finalStats.topProducts = topProducts;
-    } catch (e) { console.error("Failed to get top products:", e.message); }
+        { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+      ]),
+    ]);
 
-    // Debug log to check the final stats
-    console.log("Final stats:", finalStats);
+    finalStats.totalRevenue = currentMonthRevenue[0]?.total || 0;
+    const lastRev = lastMonthRevenue[0]?.total || 0;
+    finalStats.revenueGrowthPercentage = lastRev > 0 ? (((finalStats.totalRevenue - lastRev) / lastRev) * 100).toFixed(2) : 0;
 
+    // -------------------------------------------------
+    // 5. Pending orders (this week) + change
+    // -------------------------------------------------
+    const pendingRegex = /pending|processing|confirmed/i;
+    const [thisWeekPending, lastWeekPending] = await Promise.all([
+      Order.countDocuments({
+        $or: [{ orderDate: { $gte: startOfThisWeek } }, { createdAt: { $gte: startOfThisWeek } }],
+        orderStatus: pendingRegex,
+      }),
+      Order.countDocuments({
+        $or: [
+          { orderDate: { $gte: startOfLastWeek, $lt: startOfThisWeek } },
+          { createdAt: { $gte: startOfLastWeek, $lt: startOfThisWeek } },
+        ],
+        orderStatus: pendingRegex,
+      }),
+    ]);
+    finalStats.pendingOrders = thisWeekPending;
+    const pendingDiff = thisWeekPending - lastWeekPending;
+    finalStats.pendingChange.value = pendingDiff;
+    finalStats.pendingChange.percentage =
+      lastWeekPending > 0
+        ? ((pendingDiff / lastWeekPending) * 100).toFixed(2)
+        : thisWeekPending > 0
+        ? "100.00"
+        : "0.00";
+
+    // -------------------------------------------------
+    // 6. Delivered orders (this week) + change
+    // -------------------------------------------------
+    const deliveredRegex = /delivered|completed|shipped/i;
+    const [thisWeekDelivered, lastWeekDelivered] = await Promise.all([
+      Order.countDocuments({
+        $or: [{ orderDate: { $gte: startOfThisWeek } }, { createdAt: { $gte: startOfThisWeek } }],
+        orderStatus: deliveredRegex,
+      }),
+      Order.countDocuments({
+        $or: [
+          { orderDate: { $gte: startOfLastWeek, $lt: startOfThisWeek } },
+          { createdAt: { $gte: startOfLastWeek, $lt: startOfThisWeek } },
+        ],
+        orderStatus: deliveredRegex,
+      }),
+    ]);
+    finalStats.deliveredOrders = thisWeekDelivered;
+    const deliveredDiff = thisWeekDelivered - lastWeekDelivered;
+    finalStats.deliveredChange.value = deliveredDiff;
+    finalStats.deliveredChange.percentage =
+      lastWeekDelivered > 0
+        ? ((deliveredDiff / lastWeekDelivered) * 100).toFixed(2)
+        : thisWeekDelivered > 0
+        ? "100.00"
+        : "0.00";
+
+    // -------------------------------------------------
+    // 7. Unique customers (this week) + change
+    // -------------------------------------------------
+    const [thisWeekCust, lastWeekCust] = await Promise.all([
+      Order.distinct("userId", {
+        $or: [{ orderDate: { $gte: startOfThisWeek } }, { createdAt: { $gte: startOfThisWeek } }],
+      }),
+      Order.distinct("userId", {
+        $or: [
+          { orderDate: { $gte: startOfLastWeek, $lt: startOfThisWeek } },
+          { createdAt: { $gte: startOfLastWeek, $lt: startOfThisWeek } },
+        ],
+      }),
+    ]);
+    finalStats.totalCustomers = thisWeekCust.length;
+    const custDiff = thisWeekCust.length - lastWeekCust.length;
+    finalStats.customersChange.value = custDiff;
+    finalStats.customersChange.percentage =
+      lastWeekCust.length > 0 ? ((custDiff / lastWeekCust.length) * 100).toFixed(2) : 0;
+
+    // -------------------------------------------------
+    // 8. Top 5 products (by quantity sold)
+    // -------------------------------------------------
+    const topProducts = await Order.aggregate([
+      { $unwind: "$items" }, // <-- field name in your Order model
+      {
+        $group: {
+          _id: "$items.productId",
+          title: { $first: "$items.title" },
+          image: { $first: "$items.image" },
+          totalQty: { $sum: "$items.quantity" },
+        },
+      },
+      { $sort: { totalQty: -1 } },
+      { $limit: 5 },
+    ]);
+    finalStats.topProducts = topProducts;
+
+    // -------------------------------------------------
+    // Send response
+    // -------------------------------------------------
     res.json({ success: true, data: finalStats });
-
   } catch (error) {
-    console.error("❌ [CRITICAL ERROR] in getOrderStats:", error);
+    console.error("getOrderStats ERROR:", error);
     res.status(500).json({ success: false, message: "Failed to fetch order stats" });
   }
 };
 
-// ✅ 2️⃣ Get Sales Overview for Recharts
+// ──────────────────────────────────────────────────────────────
+// 2. GET /admin/orders/sales-overview (30-day line chart)
+// ──────────────────────────────────────────────────────────────
 export const getSalesOverview = async (req, res) => {
   try {
-    const today = new Date();
     const last30Days = new Date();
-    last30Days.setDate(today.getDate() - 30);
+    last30Days.setDate(last30Days.getDate() - 30);
 
-    const data = await Order.aggregate([
-      { 
-        $match: { 
-          $or: [
-            { orderDate: { $gte: last30Days } },
-            { createdAt: { $gte: last30Days } }
-          ]
-        } 
+    const raw = await Order.aggregate([
+      {
+        $match: {
+          $or: [{ orderDate: { $gte: last30Days } }, { createdAt: { $gte: last30Days } }],
+        },
       },
       {
         $group: {
@@ -304,7 +258,7 @@ export const getSalesOverview = async (req, res) => {
       { $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 } },
     ]);
 
-    const formatted = data.map((d) => ({
+    const formatted = raw.map((d) => ({
       date: `${d._id.day}/${d._id.month}`,
       revenue: d.revenue,
       orders: d.orders,
@@ -312,10 +266,7 @@ export const getSalesOverview = async (req, res) => {
 
     res.json({ success: true, data: formatted });
   } catch (error) {
-    console.error("❌ [CRITICAL ERROR] in getSalesOverview:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch sales overview",
-    });
+    console.error("getSalesOverview ERROR:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch sales overview" });
   }
 };
