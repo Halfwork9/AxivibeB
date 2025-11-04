@@ -136,6 +136,9 @@ export const getOrderStats = async (req, res) => {
       finalStats.topProducts = topProducts;
     } catch (e) { console.error("Failed to get top products:", e.message); }
 
+    // Debug log to check the final stats
+    console.log("Final stats:", finalStats);
+
     res.json({ success: true, data: finalStats });
 
   } catch (error) {
