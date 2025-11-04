@@ -163,3 +163,39 @@ export const updatePaymentStatus = async (req, res) => {
     });
   }
 };
+
+// Add this to your admin order controller
+
+export const debugOrderStatuses = async (req, res) => {
+  try {
+    const orders = await Order.find({});
+    const statusCounts = {};
+    const paymentStatusCounts = {};
+    
+    orders.forEach(order => {
+      const status = order.orderStatus;
+      const paymentStatus = order.paymentStatus;
+      
+      statusCounts[status] = (statusCounts[status] || 0) + 1;
+      paymentStatusCounts[paymentStatus] = (paymentStatusCounts[paymentStatus] || 0) + 1;
+    });
+    
+    res.json({ 
+      success: true, 
+      data: {
+        totalOrders: orders.length,
+        statusCounts,
+        paymentStatusCounts,
+        sampleOrders: orders.map(o => ({
+          id: o._id,
+          status: o.orderStatus,
+          paymentStatus: o.paymentStatus,
+          date: o.orderDate || o.createdAt
+        }))
+      }
+    });
+  } catch (error) {
+    console.error("Debug order statuses error:", error);
+    res.status(500).json({ success: false, message: "Failed to debug order statuses" });
+  }
+};
