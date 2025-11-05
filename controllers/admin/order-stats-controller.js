@@ -205,19 +205,20 @@ export const getOrderStats = async (req, res) => {
     // -------------------------------------------------
     // 8. Top 5 products (by quantity sold)
     // -------------------------------------------------
-    const topProducts = await Order.aggregate([
-      { $unwind: "$items" }, // <-- field name in your Order model
+   const topProducts = await Order.aggregate([
+      { $unwind: "$cartItems" }, // FIXED: matches schema field
       {
         $group: {
-          _id: "$items.productId",
-          title: { $first: "$items.title" },
-          image: { $first: "$items.image" },
-          totalQty: { $sum: "$items.quantity" },
+          _id: "$cartItems.productId",
+          title: { $first: "$cartItems.title" },
+          image: { $first: "$cartItems.image" },
+          totalQty: { $sum: "$cartItems.quantity" },
         },
       },
       { $sort: { totalQty: -1 } },
       { $limit: 5 },
     ]);
+
     finalStats.topProducts = topProducts;
 
     // -------------------------------------------------
