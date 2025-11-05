@@ -205,32 +205,65 @@ export const getOrderStats = async (req, res) => {
     // -------------------------------------------------
     // 8. Top 5 products (by quantity sold)
     // -------------------------------------------------
-   const topProducts = await Order.aggregate([
-      { $unwind: "$cartItems" }, // FIXED: matches schema field
+   // 7. Top 5 Products + Revenue
+    const topProductsAgg = await Order.aggregate([
+      { $unwind: "$cartItems" },
+      {
+        $lookup: {
+          from: "products",
+          localField: "cartItems.productId",
+          foreignField: "_id",
+          as: "product",
+        },
+      },
+      { $unwind: "$product" },
       {
         $group: {
           _id: "$cartItems.productId",
-          title: { $first: "$cartItems.title" },
-          image: { $first: "$cartItems.image" },
+          title: { $first: "$product.title" },
+          image: { $first: { $arrayElemAt: ["$product.images", 0] } },
           totalQty: { $sum: "$cartItems.quantity" },
+          revenue: { $sum: { $multiply: ["$cartItems.quantity", "$cartItems.price"] } },
         },
       },
-      { $sort: { totalQty: -1 } },
+      { $sort: { revenue: -1 } },
       { $limit: 5 },
     ]);
+    finalStats.topProducts = topProductsAgg;
+    // 8. SALES BY CATEGORY (NEW)
+    const categoryAgg = await Order.aggregate([
+      { $unwind: "$cartItems" },
+      {
+        $lookup: {
+          from: "products",
+          localField: "cartItems.productId",
+          foreignField: "_id",
+          as: "product",
+        },
+      },
+      { $unwind: "$product" },
+      {
+        $lookup: {
+          from: "categories",
+          localField: "product.categoryId",
+          foreignField: "_id",
+          as: "category",
+        },
+      },
+      { $unwind: "$category" },
+      {
+        $group: {
+          _id: "$category.name",
+          revenue: { $sum: { $multiply: ["$cartItems.quantity", "$cartItems.price"] } },
+        },
+      },
+      { $sort: { revenue: -1 } },
+    ]);
 
-     const categorySales = _(items)
-      .groupBy("category")
-      .map((items, category) => ({
-        category,           // ← matches chart: `cat.category`
-        revenue: _.sumBy(items, "revenue"),
-      }))
-      .filter(c => c.revenue > 0)
-      .orderBy("revenue", "desc")
-      .value();
-
-    finalStats.topProducts = topProducts;
-    
+    finalStats.categorySales = categoryAgg.map(c => ({
+      category: c._id,
+      revenue: c.revenue,
+    }));
     // -------------------------------------------------
     // Send response
     // -------------------------------------------------
