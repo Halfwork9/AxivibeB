@@ -1,7 +1,9 @@
 // src/controllers/admin/order-stats-controller.js
+
 import Order from "../../models/Order.js";
-import Product from "../../models/Product.js";   // <-- NEW
-import Category from "../../models/Category.js"
+import Product from "../../models/Product.js";
+import Category from "../../models/Category.js";
+
 // ──────────────────────────────────────────────────────────────
 // Helper: date ranges (this week, last week, current/last month)
 // ──────────────────────────────────────────────────────────────
@@ -61,7 +63,21 @@ export const getOrderStats = async (req, res) => {
       categorySales: [],
     };
     
-    const itemField = (await Order.findOne({}, { cartItems: 1, items: 1 }))?.cartItems ? "cartItems" : "items";
+    // Debug: Check order structure
+    const sampleOrder = await Order.findOne({});
+    console.log("Sample order structure:", JSON.stringify(sampleOrder, null, 2));
+    
+    // Determine which field contains the order items
+    let itemField = "cartItems"; // default
+    if (sampleOrder) {
+      if (sampleOrder.cartItems && Array.isArray(sampleOrder.cartItems) && sampleOrder.cartItems.length > 0) {
+        itemField = "cartItems";
+      } else if (sampleOrder.items && Array.isArray(sampleOrder.items) && sampleOrder.items.length > 0) {
+        itemField = "items";
+      }
+    }
+    console.log("Using item field:", itemField);
+    
     // ──────────────────────────────
     // 1. Extra Counters
     // ──────────────────────────────
@@ -211,68 +227,169 @@ export const getOrderStats = async (req, res) => {
     };
 
     // ──────────────────────────────
-    // 8. Top 5 Products
+    // 8. Top 5 Products (FIXED)
     // ──────────────────────────────
-   const topProductsAgg = await Order.aggregate([
-  { $unwind: `$${itemField}` },
-  {
-    $lookup: {
-      from: "products",
-      localField: `${itemField}.productId`,
-      foreignField: "_id",
-      as: "product",
-    },
-  },
-  { $unwind: "$product" },
-  {
-    $group: {
-      _id: `$${itemField}.productId`,
-      title: { $first: "$product.title" },
-      image: { $first: { $arrayElemAt: ["$product.images", 0] } },
-      totalQty: { $sum: `$${itemField}.quantity` },
-      revenue: { $sum: { $multiply: [`$${itemField}.quantity`, `$${itemField}.price`] } },
-    },
-  },
-  { $sort: { revenue: -1 } },
-  { $limit: 5 },
-]);
-finalStats.topProducts = topProductsAgg;
+    try {
+      console.log("Running top products aggregation with field:", itemField);
+      
+      // First, let's see what the raw data looks like
+      const rawItems = await Order.aggregate([
+        { $limit: 5 },
+        { $project: { [itemField]: 1 } }
+      ]);
+      console.log("Raw items data:", JSON.stringify(rawItems, null, 2));
+      
+      const topProductsAgg = await Order.aggregate([
+        { $unwind: `$${itemField}` },
+        {
+          $lookup: {
+            from: "products",
+            localField: `${itemField}.productId`,
+            foreignField: "_id",
+            as: "product",
+          },
+        },
+        { $unwind: "$product" },
+        {
+          $group: {
+            _id: `$${itemField}.productId`,
+            title: { $first: "$product.title" },
+            image: { $first: { $ifNull: [{ $arrayElemAt: ["$product.images", 0] }, "$product.image"] } },
+            totalQty: { $sum: `$${itemField}.quantity` },
+            revenue: { 
+              $sum: { 
+                $multiply: [
+                  `$${itemField}.quantity`, 
+                  { $toDouble: { 
+                    $replaceAll: {
+                      input: { 
+                        $replaceAll: { 
+                          input: `$${itemField}.price`, 
+                          find: "$", 
+                          replacement: "" 
+                        } 
+                      },
+                      find: "₹",
+                      replacement: ""
+                    }
+                  }}
+                ] 
+              } 
+            },
+          },
+        },
+        { $sort: { revenue: -1 } },
+        { $limit: 5 },
+      ]);
+      
+      console.log("Top products aggregation result:", JSON.stringify(topProductsAgg, null, 2));
+      finalStats.topProducts = topProductsAgg;
+    } catch (error) {
+      console.error("Error in top products aggregation:", error);
+      // Fallback to simpler aggregation if the complex one fails
+      try {
+        const simpleTopProducts = await Order.aggregate([
+          { $unwind: `$${itemField}` },
+          {
+            $group: {
+              _id: `$${itemField}.productId`,
+              title: { $first: `$${itemField}.title` },
+              image: { $first: `$${itemField}.image` },
+              totalQty: { $sum: `$${itemField}.quantity` },
+            },
+          },
+          { $sort: { totalQty: -1 } },
+          { $limit: 5 },
+        ]);
+        console.log("Simple top products result:", JSON.stringify(simpleTopProducts, null, 2));
+        finalStats.topProducts = simpleTopProducts;
+      } catch (simpleError) {
+        console.error("Error in simple top products aggregation:", simpleError);
+      }
+    }
 
     // ──────────────────────────────
     // 9. SALES BY CATEGORY (FIXED)
     // ──────────────────────────────
-    const categoryAgg = await Order.aggregate([
-  { $unwind: `$${itemField}` },
-  {
-    $lookup: {
-      from: "products",
-      localField: `${itemField}.productId`,
-      foreignField: "_id",
-      as: "product",
-    },
-  },
-  { $unwind: "$product" },
-  {
-    $lookup: {
-      from: "categories",
-      localField: "product.categoryId",
-      foreignField: "_id",
-      as: "category",
-    },
-  },
-  { $unwind: "$category" },
-  {
-    $group: {
-      _id: "$category.name",
-      revenue: { $sum: { $multiply: [`$${itemField}.quantity`, `$${itemField}.price`] } },
-    },
-  },
-  { $sort: { revenue: -1 } },
-]);
-finalStats.categorySales = categoryAgg.map((c) => ({
-  category: c._id,
-  revenue: c.revenue,
-}));
+    try {
+      console.log("Running category sales aggregation with field:", itemField);
+      
+      const categoryAgg = await Order.aggregate([
+        { $unwind: `$${itemField}` },
+        {
+          $lookup: {
+            from: "products",
+            localField: `${itemField}.productId`,
+            foreignField: "_id",
+            as: "product",
+          },
+        },
+        { $unwind: "$product" },
+        {
+          $lookup: {
+            from: "categories",
+            localField: "product.categoryId",
+            foreignField: "_id",
+            as: "category",
+          },
+        },
+        { $unwind: "$category" },
+        {
+          $group: {
+            _id: "$category.name",
+            revenue: { 
+              $sum: { 
+                $multiply: [
+                  `$${itemField}.quantity`, 
+                  { $toDouble: { 
+                    $replaceAll: {
+                      input: { 
+                        $replaceAll: { 
+                          input: `$${itemField}.price`, 
+                          find: "$", 
+                          replacement: "" 
+                        } 
+                      },
+                      find: "₹",
+                      replacement: ""
+                    }
+                  }}
+                ] 
+              } 
+            },
+          },
+        },
+        { $sort: { revenue: -1 } },
+      ]);
+      
+      console.log("Category sales aggregation result:", JSON.stringify(categoryAgg, null, 2));
+      finalStats.categorySales = categoryAgg.map((c) => ({
+        category: c._id,
+        revenue: c.revenue,
+      }));
+    } catch (error) {
+      console.error("Error in category sales aggregation:", error);
+      // Fallback to simpler aggregation if the complex one fails
+      try {
+        const simpleCategoryAgg = await Order.aggregate([
+          { $unwind: `$${itemField}` },
+          {
+            $group: {
+              _id: `$${itemField}.category`,
+              revenue: { $sum: `$${itemField}.price` },
+            },
+          },
+          { $sort: { revenue: -1 } },
+        ]);
+        console.log("Simple category sales result:", JSON.stringify(simpleCategoryAgg, null, 2));
+        finalStats.categorySales = simpleCategoryAgg.map((c) => ({
+          category: c._id || "Uncategorized",
+          revenue: c.revenue,
+        }));
+      } catch (simpleError) {
+        console.error("Error in simple category sales aggregation:", simpleError);
+      }
+    }
 
     res.json({ success: true, data: finalStats });
   } catch (error) {
@@ -280,7 +397,6 @@ finalStats.categorySales = categoryAgg.map((c) => ({
     res.status(500).json({ success: false, message: "Failed to fetch order stats" });
   }
 };
-
 
 // ──────────────────────────────────────────────────────────────
 // 2. GET /admin/orders/sales-overview (30-day line chart)
