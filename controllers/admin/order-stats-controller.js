@@ -59,6 +59,7 @@ export const getOrderStats = async (req, res) => {
       lowStock: [],
       confirmedOrders: 0,
       shippedOrders: 0,
+      categorySales: [],
     };
 
     // -------------------------------------------------
@@ -230,7 +231,10 @@ export const getOrderStats = async (req, res) => {
       { $limit: 5 },
     ]);
     finalStats.topProducts = topProductsAgg;
-    // 8. SALES BY CATEGORY (NEW)
+
+    // ──────────────────────────────────────────────────────────────
+    // 9. SALES BY CATEGORY (NEW)
+    // ──────────────────────────────────────────────────────────────
     const categoryAgg = await Order.aggregate([
       { $unwind: "$cartItems" },
       {
