@@ -43,7 +43,6 @@ export const getOrderStats = async (req, res) => {
       endOfLastMonth,
     } = getDateRanges();
 
-    // ----- Default shape (never null) -----
     const finalStats = {
       totalOrders: 0,
       totalRevenue: 0,
@@ -62,23 +61,23 @@ export const getOrderStats = async (req, res) => {
       categorySales: [],
     };
 
-    // -------------------------------------------------
-    // 1. Confirmed & Shipped (extra counters)
-    // -------------------------------------------------
+    // ──────────────────────────────
+    // 1. Extra Counters
+    // ──────────────────────────────
     finalStats.confirmedOrders = await Order.countDocuments({ orderStatus: /confirmed/i });
     finalStats.shippedOrders = await Order.countDocuments({ orderStatus: /shipped/i });
 
-    // -------------------------------------------------
-    // 2. Low-stock products (max 5)
-    // -------------------------------------------------
+    // ──────────────────────────────
+    // 2. Low Stock
+    // ──────────────────────────────
     finalStats.lowStock = await Product.find({ totalStock: { $lt: 10 } })
       .select("title totalStock")
       .limit(5)
       .lean();
 
-    // -------------------------------------------------
-    // 3. Total orders (this week) + change
-    // -------------------------------------------------
+    // ──────────────────────────────
+    // 3. Orders this/last week
+    // ──────────────────────────────
     const [thisWeekOrders, lastWeekOrders] = await Promise.all([
       Order.countDocuments({
         $or: [{ orderDate: { $gte: startOfThisWeek } }, { createdAt: { $gte: startOfThisWeek } }],
@@ -92,13 +91,14 @@ export const getOrderStats = async (req, res) => {
     ]);
     finalStats.totalOrders = thisWeekOrders;
     const ordersDiff = thisWeekOrders - lastWeekOrders;
-    finalStats.ordersChange.value = ordersDiff;
-    finalStats.ordersChange.percentage =
-      lastWeekOrders > 0 ? ((ordersDiff / lastWeekOrders) * 100).toFixed(2) : 0;
+    finalStats.ordersChange = {
+      value: ordersDiff,
+      percentage: lastWeekOrders > 0 ? ((ordersDiff / lastWeekOrders) * 100).toFixed(2) : 0,
+    };
 
-    // -------------------------------------------------
-    // 4. Revenue (current month) + growth
-    // -------------------------------------------------
+    // ──────────────────────────────
+    // 4. Revenue current vs last month
+    // ──────────────────────────────
     const [currentMonthRevenue, lastMonthRevenue] = await Promise.all([
       Order.aggregate([
         {
@@ -127,11 +127,12 @@ export const getOrderStats = async (req, res) => {
 
     finalStats.totalRevenue = currentMonthRevenue[0]?.total || 0;
     const lastRev = lastMonthRevenue[0]?.total || 0;
-    finalStats.revenueGrowthPercentage = lastRev > 0 ? (((finalStats.totalRevenue - lastRev) / lastRev) * 100).toFixed(2) : 0;
+    finalStats.revenueGrowthPercentage =
+      lastRev > 0 ? (((finalStats.totalRevenue - lastRev) / lastRev) * 100).toFixed(2) : 0;
 
-    // -------------------------------------------------
-    // 5. Pending orders (this week) + change
-    // -------------------------------------------------
+    // ──────────────────────────────
+    // 5. Pending Orders
+    // ──────────────────────────────
     const pendingRegex = /pending|processing|confirmed/i;
     const [thisWeekPending, lastWeekPending] = await Promise.all([
       Order.countDocuments({
@@ -147,18 +148,19 @@ export const getOrderStats = async (req, res) => {
       }),
     ]);
     finalStats.pendingOrders = thisWeekPending;
-    const pendingDiff = thisWeekPending - lastWeekPending;
-    finalStats.pendingChange.value = pendingDiff;
-    finalStats.pendingChange.percentage =
-      lastWeekPending > 0
-        ? ((pendingDiff / lastWeekPending) * 100).toFixed(2)
-        : thisWeekPending > 0
-        ? "100.00"
-        : "0.00";
+    finalStats.pendingChange = {
+      value: thisWeekPending - lastWeekPending,
+      percentage:
+        lastWeekPending > 0
+          ? (((thisWeekPending - lastWeekPending) / lastWeekPending) * 100).toFixed(2)
+          : thisWeekPending > 0
+          ? "100.00"
+          : "0.00",
+    };
 
-    // -------------------------------------------------
-    // 6. Delivered orders (this week) + change
-    // -------------------------------------------------
+    // ──────────────────────────────
+    // 6. Delivered Orders
+    // ──────────────────────────────
     const deliveredRegex = /delivered|completed|shipped/i;
     const [thisWeekDelivered, lastWeekDelivered] = await Promise.all([
       Order.countDocuments({
@@ -174,18 +176,19 @@ export const getOrderStats = async (req, res) => {
       }),
     ]);
     finalStats.deliveredOrders = thisWeekDelivered;
-    const deliveredDiff = thisWeekDelivered - lastWeekDelivered;
-    finalStats.deliveredChange.value = deliveredDiff;
-    finalStats.deliveredChange.percentage =
-      lastWeekDelivered > 0
-        ? ((deliveredDiff / lastWeekDelivered) * 100).toFixed(2)
-        : thisWeekDelivered > 0
-        ? "100.00"
-        : "0.00";
+    finalStats.deliveredChange = {
+      value: thisWeekDelivered - lastWeekDelivered,
+      percentage:
+        lastWeekDelivered > 0
+          ? (((thisWeekDelivered - lastWeekDelivered) / lastWeekDelivered) * 100).toFixed(2)
+          : thisWeekDelivered > 0
+          ? "100.00"
+          : "0.00",
+    };
 
-    // -------------------------------------------------
-    // 7. Unique customers (this week) + change
-    // -------------------------------------------------
+    // ──────────────────────────────
+    // 7. Unique Customers
+    // ──────────────────────────────
     const [thisWeekCust, lastWeekCust] = await Promise.all([
       Order.distinct("userId", {
         $or: [{ orderDate: { $gte: startOfThisWeek } }, { createdAt: { $gte: startOfThisWeek } }],
@@ -198,15 +201,17 @@ export const getOrderStats = async (req, res) => {
       }),
     ]);
     finalStats.totalCustomers = thisWeekCust.length;
-    const custDiff = thisWeekCust.length - lastWeekCust.length;
-    finalStats.customersChange.value = custDiff;
-    finalStats.customersChange.percentage =
-      lastWeekCust.length > 0 ? ((custDiff / lastWeekCust.length) * 100).toFixed(2) : 0;
+    finalStats.customersChange = {
+      value: thisWeekCust.length - lastWeekCust.length,
+      percentage:
+        lastWeekCust.length > 0
+          ? (((thisWeekCust.length - lastWeekCust.length) / lastWeekCust.length) * 100).toFixed(2)
+          : 0,
+    };
 
-    // -------------------------------------------------
-    // 8. Top 5 products (by quantity sold)
-    // -------------------------------------------------
-   // 7. Top 5 Products + Revenue
+    // ──────────────────────────────
+    // 8. Top 5 Products
+    // ──────────────────────────────
     const topProductsAgg = await Order.aggregate([
       { $unwind: "$cartItems" },
       {
@@ -232,9 +237,9 @@ export const getOrderStats = async (req, res) => {
     ]);
     finalStats.topProducts = topProductsAgg;
 
-    // ──────────────────────────────────────────────────────────────
-    // 9. SALES BY CATEGORY (NEW)
-    // ──────────────────────────────────────────────────────────────
+    // ──────────────────────────────
+    // 9. SALES BY CATEGORY (FIXED)
+    // ──────────────────────────────
     const categoryAgg = await Order.aggregate([
       { $unwind: "$cartItems" },
       {
@@ -254,29 +259,34 @@ export const getOrderStats = async (req, res) => {
           as: "category",
         },
       },
-      { $unwind: "$category" },
+      {
+        $addFields: {
+          categoryName: {
+            $ifNull: [{ $arrayElemAt: ["$category.name", 0] }, "Uncategorized"],
+          },
+        },
+      },
       {
         $group: {
-          _id: "$category.name",
+          _id: "$categoryName",
           revenue: { $sum: { $multiply: ["$cartItems.quantity", "$cartItems.price"] } },
         },
       },
       { $sort: { revenue: -1 } },
     ]);
 
-    finalStats.categorySales = categoryAgg.map(c => ({
+    finalStats.categorySales = categoryAgg.map((c) => ({
       category: c._id,
       revenue: c.revenue,
     }));
-    // -------------------------------------------------
-    // Send response
-    // -------------------------------------------------
+
     res.json({ success: true, data: finalStats });
   } catch (error) {
     console.error("getOrderStats ERROR:", error);
     res.status(500).json({ success: false, message: "Failed to fetch order stats" });
   }
 };
+
 
 // ──────────────────────────────────────────────────────────────
 // 2. GET /admin/orders/sales-overview (30-day line chart)
