@@ -25,7 +25,7 @@ import commonFeatureRouter from "./routes/common/feature-routes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 import categoryRoutes from "./routes/admin/category-routes.js";
 import distributorRoutes from "./routes/distributor-routes.js";
-
+import { initSocket } from "./config/socket.js";
 // --- Config ---
 dotenv.config();
 const app = express();
@@ -182,6 +182,11 @@ app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "dist", "index.html"));
 });
 
+const httpServer = app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
+
+initSocket(httpServer);
 // --- MongoDB Connection ---
 mongoose
   .connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
