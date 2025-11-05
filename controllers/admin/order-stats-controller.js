@@ -219,8 +219,17 @@ export const getOrderStats = async (req, res) => {
       { $limit: 5 },
     ]);
 
-    finalStats.topProducts = topProducts;
+     const categorySales = _(items)
+      .groupBy("category")
+      .map((items, category) => ({
+        category,
+        revenue: _.sumBy(items, "total"),
+      }))
+      .orderBy("revenue", "desc")
+      .value();
 
+    finalStats.topProducts = topProducts;
+    
     // -------------------------------------------------
     // Send response
     // -------------------------------------------------
