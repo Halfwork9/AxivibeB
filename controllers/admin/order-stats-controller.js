@@ -1,7 +1,7 @@
 // src/controllers/admin/order-stats-controller.js
 import Order from "../../models/Order.js";
 import Product from "../../models/Product.js";   // <-- NEW
-
+import Category from "../../models/Category.js"
 // ──────────────────────────────────────────────────────────────
 // Helper: date ranges (this week, last week, current/last month)
 // ──────────────────────────────────────────────────────────────
@@ -222,9 +222,10 @@ export const getOrderStats = async (req, res) => {
      const categorySales = _(items)
       .groupBy("category")
       .map((items, category) => ({
-        category,
-        revenue: _.sumBy(items, "total"),
+        category,           // ← matches chart: `cat.category`
+        revenue: _.sumBy(items, "revenue"),
       }))
+      .filter(c => c.revenue > 0)
       .orderBy("revenue", "desc")
       .value();
 
