@@ -314,6 +314,10 @@ export const getOrderStats = async (req, res) => {
 try {
   console.log("Running category sales aggregation with field:", itemField);
 
+  // First, let's check what categories exist
+  const categories = await Category.find({});
+  console.log("Available categories:", categories.map(c => ({ id: c._id, name: c.name })));
+
   const categoryAgg = await Order.aggregate([
     { $unwind: `$${itemField}` },
     {
@@ -345,7 +349,7 @@ try {
     {
       $group: {
         _id: {
-          $ifNull: ["$category.name", "$product.category", "Uncategorized"],
+          $ifNull: ["$category.name", "Uncategorized"],
         },
         revenue: {
           $sum: {
@@ -385,10 +389,13 @@ try {
 
   console.log("Category sales aggregation result:", JSON.stringify(categoryAgg, null, 2));
 
+  // Format the data for the chart
   finalStats.categorySales = categoryAgg.map((c) => ({
-    category: c._id || "Unknown Category",
-    revenue: c.revenue || 0,
+    name: c._id || "Unknown Category",
+    value: c.revenue || 0,
   }));
+  
+  console.log("Formatted category sales data:", JSON.stringify(finalStats.categorySales, null, 2));
 } catch (error) {
   console.error("Error in category sales aggregation:", error);
 
@@ -405,15 +412,20 @@ try {
       { $sort: { revenue: -1 } },
     ]);
 
+    // Format the data for the chart
     finalStats.categorySales = simpleCategoryAgg.map((c) => ({
-      category: c._id || "Uncategorized",
-      revenue: c.revenue || 0,
+      name: c._id || "Uncategorized",
+      value: c.revenue || 0,
     }));
+    
+    console.log("Formatted fallback category sales data:", JSON.stringify(finalStats.categorySales, null, 2));
   } catch (simpleError) {
     console.error("Error in simple category sales aggregation:", simpleError);
+    // Provide empty array with default category
+    finalStats.categorySales = [{ name: "No Data", value: 0 }];
   }
 }
-
+    
     res.json({ success: true, data: finalStats });
   } catch (error) {
     console.error("getOrderStats ERROR:", error);
