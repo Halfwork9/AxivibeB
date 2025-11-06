@@ -166,36 +166,83 @@ export const updatePaymentStatus = async (req, res) => {
 
 // Add this to your admin order controller
 
-export const debugOrderStatuses = async (req, res) => {
+export const debugCategoryData = async (req, res) => {
   try {
-    const orders = await Order.find({});
-    const statusCounts = {};
-    const paymentStatusCounts = {};
+    const orders = await Order.find({}).limit(5);
+    const products = await Product.find({}).populate('categoryId').limit(5);
+    const categories = await Category.find({});
     
-    orders.forEach(order => {
-      const status = order.orderStatus;
-      const paymentStatus = order.paymentStatus;
-      
-      statusCounts[status] = (statusCounts[status] || 0) + 1;
-      paymentStatusCounts[paymentStatus] = (paymentStatusCounts[paymentStatus] || 0) + 1;
-    });
+    // Check if products have categoryId
+    const productsWithCategory = await Product.find({ 
+      categoryId: { $exists: true, $ne: null } 
+    }).populate('categoryId').limit(5);
+    
+    const productsWithoutCategory = await Product.find({ 
+      $or: [
+        { categoryId: { $exists: false } },
+        { categoryId: null }
+      ]
+    }).limit(5);
+    
+    // Check order items with their products
+    const orderItemsWithProducts = await Order.aggregate([
+      { $limit: 3 },
+      { $unwind: "$cartItems" },
+      {
+        $lookup: {
+          from: "products",
+          localField: "cartItems.productId",
+          foreignField: "_id",
+          as: "product",
+        },
+      },
+      { $unwind: "$product" },
+      {
+        $lookup: {
+          from: "categories",
+          localField: "product.categoryId",
+          foreignField: "_id",
+          as: "category",
+        },
+      },
+      {
+        $project: {
+          orderId: "$_id",
+          productId: "$cartItems.productId",
+          productTitle: "$product.title",
+          productCategoryId: "$product.categoryId",
+          category: "$category",
+          price: "$cartItems.price",
+          quantity: "$cartItems.quantity"
+        }
+      }
+    ]);
     
     res.json({ 
       success: true, 
       data: {
         totalOrders: orders.length,
-        statusCounts,
-        paymentStatusCounts,
-        sampleOrders: orders.map(o => ({
-          id: o._id,
-          status: o.orderStatus,
-          paymentStatus: o.paymentStatus,
-          date: o.orderDate || o.createdAt
-        }))
+        totalProducts: await Product.countDocuments(),
+        totalCategories: categories.length,
+        productsWithCategoryCount: await Product.countDocuments({ 
+          categoryId: { $exists: true, $ne: null } 
+        }),
+        productsWithoutCategoryCount: await Product.countDocuments({ 
+          $or: [
+            { categoryId: { $exists: false } },
+            { categoryId: null }
+          ]
+        }),
+        orders,
+        products,
+        categories,
+        productsWithCategory,
+        productsWithoutCategory,
+        orderItemsWithProducts
       }
     });
   } catch (error) {
-    console.error("Debug order statuses error:", error);
-    res.status(500).json({ success: false, message: "Failed to debug order statuses" });
+    console.error("Debug category data error:", error);
+    res.status(500).json({ success: false, message: "Failed to debug category data" });
   }
 };
