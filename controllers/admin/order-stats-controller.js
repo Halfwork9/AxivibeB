@@ -308,88 +308,111 @@ export const getOrderStats = async (req, res) => {
       }
     }
 
-    // ──────────────────────────────
-    // 9. SALES BY CATEGORY (FIXED)
-    // ──────────────────────────────
-    try {
-      console.log("Running category sales aggregation with field:", itemField);
-      
-      const categoryAgg = await Order.aggregate([
-        { $unwind: `$${itemField}` },
-        {
-          $lookup: {
-            from: "products",
-            localField: `${itemField}.productId`,
-            foreignField: "_id",
-            as: "product",
-          },
+   // ──────────────────────────────
+// 9. SALES BY CATEGORY (FIXED & SAFE)
+// ──────────────────────────────
+try {
+  console.log("Running category sales aggregation with field:", itemField);
+
+  const categoryAgg = await Order.aggregate([
+    { $unwind: `$${itemField}` },
+    {
+      $lookup: {
+        from: "products",
+        localField: `${itemField}.productId`,
+        foreignField: "_id",
+        as: "product",
+      },
+    },
+    { $unwind: "$product" },
+
+    // If your Product model uses "categoryId" (ObjectId) to reference Category
+    {
+      $lookup: {
+        from: "categories",
+        localField: "product.categoryId",
+        foreignField: "_id",
+        as: "category",
+      },
+    },
+    {
+      // Safely unwind in case category is missing
+      $unwind: {
+        path: "$category",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $group: {
+        _id: {
+          $ifNull: ["$category.name", "$product.category", "Uncategorized"],
         },
-        { $unwind: "$product" },
-        {
-          $lookup: {
-            from: "categories",
-            localField: "product.categoryId",
-            foreignField: "_id",
-            as: "category",
-          },
-        },
-        { $unwind: "$category" },
-        {
-          $group: {
-            _id: "$category.name",
-            revenue: { 
-              $sum: { 
-                $multiply: [
-                  `$${itemField}.quantity`, 
-                  { $toDouble: { 
-                    $replaceAll: {
-                      input: { 
-                        $replaceAll: { 
-                          input: `$${itemField}.price`, 
-                          find: "$", 
-                          replacement: "" 
-                        } 
+        revenue: {
+          $sum: {
+            $multiply: [
+              `$${itemField}.quantity`,
+              {
+                // Handle both numeric and string prices
+                $cond: {
+                  if: { $isNumber: `$${itemField}.price` },
+                  then: `$${itemField}.price`,
+                  else: {
+                    $toDouble: {
+                      $replaceAll: {
+                        input: {
+                          $replaceAll: {
+                            input: {
+                              $ifNull: [`$${itemField}.price`, "0"],
+                            },
+                            find: "₹",
+                            replacement: "",
+                          },
+                        },
+                        find: "$",
+                        replacement: "",
                       },
-                      find: "₹",
-                      replacement: ""
-                    }
-                  }}
-                ] 
-              } 
-            },
+                    },
+                  },
+                },
+              },
+            ],
           },
         },
-        { $sort: { revenue: -1 } },
-      ]);
-      
-      console.log("Category sales aggregation result:", JSON.stringify(categoryAgg, null, 2));
-      finalStats.categorySales = categoryAgg.map((c) => ({
-        category: c._id,
-        revenue: c.revenue,
-      }));
-    } catch (error) {
-      console.error("Error in category sales aggregation:", error);
-      // Fallback to simpler aggregation if the complex one fails
-      try {
-        const simpleCategoryAgg = await Order.aggregate([
-          { $unwind: `$${itemField}` },
-          {
-            $group: {
-              _id: `$${itemField}.category`,
-              revenue: { $sum: `$${itemField}.price` },
-            },
-          },
-          { $sort: { revenue: -1 } },
-        ]);
-        console.log("Simple category sales result:", JSON.stringify(simpleCategoryAgg, null, 2));
-        finalStats.categorySales = simpleCategoryAgg.map((c) => ({
-          category: c._id || "Uncategorized",
-          revenue: c.revenue,
-        }));
-      } catch (simpleError) {
-        console.error("Error in simple category sales aggregation:", simpleError);
-      }
-    }
+      },
+    },
+    { $sort: { revenue: -1 } },
+  ]);
+
+  console.log("Category sales aggregation result:", JSON.stringify(categoryAgg, null, 2));
+
+  finalStats.categorySales = categoryAgg.map((c) => ({
+    category: c._id || "Unknown Category",
+    revenue: c.revenue || 0,
+  }));
+} catch (error) {
+  console.error("Error in category sales aggregation:", error);
+
+  // Fallback: simple aggregation if lookup fails
+  try {
+    const simpleCategoryAgg = await Order.aggregate([
+      { $unwind: `$${itemField}` },
+      {
+        $group: {
+          _id: `$${itemField}.category` || "Uncategorized",
+          revenue: { $sum: `$${itemField}.price` },
+        },
+      },
+      { $sort: { revenue: -1 } },
+    ]);
+
+    finalStats.categorySales = simpleCategoryAgg.map((c) => ({
+      category: c._id || "Uncategorized",
+      revenue: c.revenue || 0,
+    }));
+  } catch (simpleError) {
+    console.error("Error in simple category sales aggregation:", simpleError);
+  }
+}
 
     res.json({ success: true, data: finalStats });
   } catch (error) {
