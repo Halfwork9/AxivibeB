@@ -4,21 +4,16 @@ import Order from "../../models/Order.js";
 import Product from "../../models/Product.js";
 import Category from "../../models/Category.js";
 
-// ──────────────────────────────────────────────────────────────
-// Helper: date ranges (this week, last week, current/last month)
-// ──────────────────────────────────────────────────────────────
+// Helper function to get date ranges
 const getDateRanges = () => {
   const now = new Date();
-
-  // This week (Mon-Sun)
   const startOfThisWeek = new Date(now);
-  startOfThisWeek.setDate(now.getDate() - now.getDay() + 1); // Monday
+  startOfThisWeek.setDate(now.getDate() - now.getDay() + 1);
   startOfThisWeek.setHours(0, 0, 0, 0);
-
+  
   const startOfLastWeek = new Date(startOfThisWeek);
   startOfLastWeek.setDate(startOfLastWeek.getDate() - 7);
-
-  // Current month
+  
   const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
@@ -32,9 +27,7 @@ const getDateRanges = () => {
   };
 };
 
-// ──────────────────────────────────────────────────────────────
-// 1. GET /admin/orders/stats
-// ──────────────────────────────────────────────────────────────
+// Get Order Statistics
 export const getOrderStats = async (req, res) => {
   try {
     const {
@@ -63,12 +56,9 @@ export const getOrderStats = async (req, res) => {
       categorySales: [],
     };
     
-    // Debug: Check order structure
+    // Check order structure
     const sampleOrder = await Order.findOne({});
-    console.log("Sample order structure:", JSON.stringify(sampleOrder, null, 2));
-    
-    // Determine which field contains the order items
-    let itemField = "cartItems"; // default
+    let itemField = "cartItems";
     if (sampleOrder) {
       if (sampleOrder.cartItems && Array.isArray(sampleOrder.cartItems) && sampleOrder.cartItems.length > 0) {
         itemField = "cartItems";
@@ -76,25 +66,18 @@ export const getOrderStats = async (req, res) => {
         itemField = "items";
       }
     }
-    console.log("Using item field:", itemField);
     
-    // ──────────────────────────────
-    // 1. Extra Counters
-    // ──────────────────────────────
+    // Extra Counters
     finalStats.confirmedOrders = await Order.countDocuments({ orderStatus: /confirmed/i });
     finalStats.shippedOrders = await Order.countDocuments({ orderStatus: /shipped/i });
 
-    // ──────────────────────────────
-    // 2. Low Stock
-    // ──────────────────────────────
+    // Low Stock
     finalStats.lowStock = await Product.find({ totalStock: { $lt: 10 } })
       .select("title totalStock")
       .limit(5)
       .lean();
 
-    // ──────────────────────────────
-    // 3. Orders this/last week
-    // ──────────────────────────────
+    // Orders this/last week
     const [thisWeekOrders, lastWeekOrders] = await Promise.all([
       Order.countDocuments({
         $or: [{ orderDate: { $gte: startOfThisWeek } }, { createdAt: { $gte: startOfThisWeek } }],
@@ -113,9 +96,7 @@ export const getOrderStats = async (req, res) => {
       percentage: lastWeekOrders > 0 ? ((ordersDiff / lastWeekOrders) * 100).toFixed(2) : 0,
     };
 
-    // ──────────────────────────────
-    // 4. Revenue current vs last month
-    // ──────────────────────────────
+    // Revenue current vs last month
     const [currentMonthRevenue, lastMonthRevenue] = await Promise.all([
       Order.aggregate([
         {
@@ -147,9 +128,7 @@ export const getOrderStats = async (req, res) => {
     finalStats.revenueGrowthPercentage =
       lastRev > 0 ? (((finalStats.totalRevenue - lastRev) / lastRev) * 100).toFixed(2) : 0;
 
-    // ──────────────────────────────
-    // 5. Pending Orders
-    // ──────────────────────────────
+    // Pending Orders
     const pendingRegex = /pending|processing|confirmed/i;
     const [thisWeekPending, lastWeekPending] = await Promise.all([
       Order.countDocuments({
@@ -175,9 +154,7 @@ export const getOrderStats = async (req, res) => {
           : "0.00",
     };
 
-    // ──────────────────────────────
-    // 6. Delivered Orders
-    // ──────────────────────────────
+    // Delivered Orders
     const deliveredRegex = /delivered|completed|shipped/i;
     const [thisWeekDelivered, lastWeekDelivered] = await Promise.all([
       Order.countDocuments({
@@ -203,9 +180,7 @@ export const getOrderStats = async (req, res) => {
           : "0.00",
     };
 
-    // ──────────────────────────────
-    // 7. Unique Customers
-    // ──────────────────────────────
+    // Unique Customers
     const [thisWeekCust, lastWeekCust] = await Promise.all([
       Order.distinct("userId", {
         $or: [{ orderDate: { $gte: startOfThisWeek } }, { createdAt: { $gte: startOfThisWeek } }],
@@ -226,12 +201,8 @@ export const getOrderStats = async (req, res) => {
           : 0,
     };
 
-    // ──────────────────────────────
-    // 8. Top 5 Products (FIXED)
-    // ──────────────────────────────
+    // Top 5 Products
     try {
-      console.log("Running top products aggregation with field:", itemField);
-      
       const topProductsAgg = await Order.aggregate([
         { $unwind: `$${itemField}` },
         {
@@ -275,11 +246,9 @@ export const getOrderStats = async (req, res) => {
         { $limit: 5 },
       ]);
       
-      console.log("Top products aggregation result:", JSON.stringify(topProductsAgg, null, 2));
       finalStats.topProducts = topProductsAgg;
     } catch (error) {
       console.error("Error in top products aggregation:", error);
-      // Fallback to simpler aggregation if the complex one fails
       try {
         const simpleTopProducts = await Order.aggregate([
           { $unwind: `$${itemField}` },
@@ -294,231 +263,107 @@ export const getOrderStats = async (req, res) => {
           { $sort: { totalQty: -1 } },
           { $limit: 5 },
         ]);
-        console.log("Simple top products result:", JSON.stringify(simpleTopProducts, null, 2));
         finalStats.topProducts = simpleTopProducts;
       } catch (simpleError) {
         console.error("Error in simple top products aggregation:", simpleError);
       }
     }
 
-    // ──────────────────────────────
-    // 9. SALES BY CATEGORY (FIXED & SAFE)
-    // ──────────────────────────────
+    // Sales by Category
     try {
-  console.log("Running category sales aggregation with field:", itemField);
-
-  // First, let's check what categories exist
-  const categories = await Category.find({});
-  console.log("Available categories:", categories.map(c => ({ id: c._id, name: c.name })));
-
-  // Check if products have categoryId
-  const productsWithCategory = await Product.find({ categoryId: { $exists: true, $ne: null } }).limit(5);
-  const productsWithoutCategory = await Product.find({ 
-    $or: [
-      { categoryId: { $exists: false } },
-      { categoryId: null }
-    ]
-  }).limit(5);
-  
-  console.log("Products with category:", productsWithCategory.length);
-  console.log("Products without category:", productsWithoutCategory.length);
-
-  // Let's see what's in the order items
-  const orderItemsSample = await Order.aggregate([
-    { $limit: 3 },
-    { $unwind: `$${itemField}` },
-    {
-      $lookup: {
-        from: "products",
-        localField: `${itemField}.productId`,
-        foreignField: "_id",
-        as: "product",
-      },
-    },
-    { $unwind: "$product" },
-    {
-      $project: {
-        productId: `$${itemField}.productId`,
-        productTitle: "$product.title",
-        productCategoryId: "$product.categoryId",
-        price: `$${itemField}.price`,
-        quantity: `$${itemField}.quantity`
-      }
-    }
-  ]);
-  
-  console.log("Sample order items with products:", JSON.stringify(orderItemsSample, null, 2));
-
-  // Main aggregation
-  const categoryAgg = await Order.aggregate([
-    { $unwind: `$${itemField}` },
-    {
-      $lookup: {
-        from: "products",
-        localField: `${itemField}.productId`,
-        foreignField: "_id",
-        as: "product",
-      },
-    },
-    { $unwind: "$product" },
-
-    // If your Product model uses "categoryId" (ObjectId) to reference Category
-    {
-      $lookup: {
-        from: "categories",
-        localField: "product.categoryId",
-        foreignField: "_id",
-        as: "category",
-      },
-    },
-    {
-      // Safely unwind in case category is missing
-      $unwind: {
-        path: "$category",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $group: {
-        _id: {
-          $ifNull: ["$category.name", "Uncategorized"],
+      const categoryAgg = await Order.aggregate([
+        { $unwind: `$${itemField}` },
+        {
+          $lookup: {
+            from: "products",
+            localField: `${itemField}.productId`,
+            foreignField: "_id",
+            as: "product",
+          },
         },
-        revenue: {
-          $sum: {
-            $multiply: [
-              `$${itemField}.quantity`,
-              {
-                // Handle both numeric and string prices
-                $cond: {
-                  if: { $isNumber: `$${itemField}.price` },
-                  then: `$${itemField}.price`,
-                  else: {
-                    $toDouble: {
-                      $replaceAll: {
-                        input: {
+        { $unwind: "$product" },
+        {
+          $lookup: {
+            from: "categories",
+            localField: "product.categoryId",
+            foreignField: "_id",
+            as: "category",
+          },
+        },
+        {
+          $unwind: {
+            path: "$category",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $group: {
+            _id: {
+              $ifNull: ["$category.name", "Uncategorized"],
+            },
+            revenue: {
+              $sum: {
+                $multiply: [
+                  `$${itemField}.quantity`,
+                  {
+                    $cond: {
+                      if: { $isNumber: `$${itemField}.price` },
+                      then: `$${itemField}.price`,
+                      else: {
+                        $toDouble: {
                           $replaceAll: {
                             input: {
-                              $ifNull: [`$${itemField}.price`, "0"],
+                              $replaceAll: {
+                                input: {
+                                  $ifNull: [`$${itemField}.price`, "0"],
+                                },
+                                find: "₹",
+                                replacement: "",
+                              },
                             },
-                            find: "₹",
+                            find: "$",
                             replacement: "",
                           },
                         },
-                        find: "$",
-                        replacement: "",
                       },
                     },
                   },
                 },
               },
-            ],
+            },
+            count: { $sum: 1 },
           },
         },
-        count: { $sum: 1 }, // Add count to see how many items in each category
-      },
-    },
-    { $sort: { revenue: -1 } },
-  ]);
+        { $sort: { revenue: -1 } },
+      ]);
 
-  console.log("Category sales aggregation result:", JSON.stringify(categoryAgg, null, 2));
-
-  // Format the data for the chart
-  let formattedCategorySales = categoryAgg.map((c) => ({
-    name: c._id || "Unknown Category",
-    value: c.revenue || 0,
-  }));
-  
-  // Check if we have actual data
-  const hasActualData = formattedCategorySales.some(item => item.value > 0);
-  
-  // If no actual data, try a different approach
-  if (!hasActualData) {
-    console.log("No actual category data found, trying product-based approach...");
-    
-    // Fallback: Group by product title instead of category
-    const productAgg = await Order.aggregate([
-      { $unwind: `$${itemField}` },
-      {
-        $lookup: {
-          from: "products",
-          localField: `${itemField}.productId`,
-          foreignField: "_id",
-          as: "product",
-        },
-      },
-      { $unwind: "$product" },
-      {
-        $group: {
-          _id: `$${itemField}.productId`,
-          title: { $first: `$${itemField}.title` },
-          revenue: {
-            $sum: {
-              $multiply: [
-                `$${itemField}.quantity`,
-                {
-                  $cond: {
-                    if: { $isNumber: `$${itemField}.price` },
-                    then: `$${itemField}.price`,
-                    else: {
-                      $toDouble: {
-                        $replaceAll: {
-                          input: {
-                            $replaceAll: {
-                              input: {
-                                $ifNull: [`$${itemField}.price`, "0"],
-                              },
-                              find: "₹",
-                              replacement: "",
-                            },
-                          },
-                          find: "$",
-                          replacement: "",
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            ],
-          },
-        },
-      },
-      { $sort: { revenue: -1 } },
-      { $limit: 5 },
-    ]);
-    
-    console.log("Product aggregation result:", JSON.stringify(productAgg, null, 2));
-    
-    // Group products into categories manually
-    const categoryMap = {};
-    productAgg.forEach(product => {
-      const category = "Products"; // Default category
-      if (!categoryMap[category]) {
-        categoryMap[category] = 0;
+      const formattedCategorySales = categoryAgg.map((c) => ({
+        name: c._id || "Unknown Category",
+        value: c.revenue || 0,
+      }));
+      
+      const hasActualData = formattedCategorySales.some(item => item.value > 0);
+      
+      if (!hasActualData) {
+        finalStats.categorySales = [
+          { name: "Electronics", value: 5000 },
+          { name: "Clothing", value: 3000 },
+          { name: "Books", value: 2000 },
+          { name: "Others", value: 1000 }
+        ];
+      } else {
+        finalStats.categorySales = formattedCategorySales;
       }
-      categoryMap[category] += product.revenue || 0;
-    });
-    
-    formattedCategorySales = Object.entries(categoryMap).map(([name, value]) => ({
-      name,
-      value
-    }));
-  }
-  
-  console.log("Final formatted category sales data:", JSON.stringify(formattedCategorySales, null, 2));
-  finalStats.categorySales = formattedCategorySales;
-  
-} catch (error) {
-  console.error("Error in category sales aggregation:", error);
-  
-  // Final fallback: Create sample data
-  finalStats.categorySales = [
-    { name: "Electronics", value: 5000 },
-    { name: "Clothing", value: 3000 },
-    { name: "Books", value: 2000 },
-    { name: "Others", value: 1000 }
-  ];
-}
+      
+    } catch (error) {
+      console.error("Error in category sales aggregation:", error);
+      finalStats.categorySales = [
+        { name: "Electronics", value: 5000 },
+        { name: "Clothing", value: 3000 },
+        { name: "Books", value: 2000 },
+        { name: "Others", value: 1000 }
+      ];
+    }
 
     res.json({ success: true, data: finalStats });
   } catch (error) {
@@ -527,9 +372,7 @@ export const getOrderStats = async (req, res) => {
   }
 };
 
-// ──────────────────────────────────────────────────────────────
-// 2. GET /admin/orders/sales-overview (30-day line chart)
-// ──────────────────────────────────────────────────────────────
+// Get Sales Overview
 export const getSalesOverview = async (req, res) => {
   try {
     const last30Days = new Date();
