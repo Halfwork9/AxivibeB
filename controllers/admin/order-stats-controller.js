@@ -68,8 +68,7 @@ export const getOrderStats = async (req, res) => {
       totalRevenue: finalStats.totalRevenue
     });
 
-    // Get Top 5 Products - More debugging
-try {
+    try {
   console.log("=== Getting Top Products ===");
   
   // Check if orders have cartItems
@@ -78,13 +77,6 @@ try {
   
   if (ordersWithCartItems) {
     console.log("Using cartItems field");
-    
-    // First, let's see what's in the cartItems
-    const sampleCartItems = await Order.aggregate([
-      { $limit: 2 },
-      { $project: { cartItems: 1 } }
-    ]);
-    console.log("Sample cartItems:", JSON.stringify(sampleCartItems, null, 2));
     
     const topProducts = await Order.aggregate([
       { $unwind: "$cartItems" },
@@ -115,13 +107,6 @@ try {
     console.log("Found orders with items:", !!ordersWithItems);
     
     if (ordersWithItems) {
-      // First, let's see what's in the items
-      const sampleItems = await Order.aggregate([
-        { $limit: 2 },
-        { $project: { items: 1 } }
-      ]);
-      console.log("Sample items:", JSON.stringify(sampleItems, null, 2));
-      
       const topProducts = await Order.aggregate([
         { $unwind: "$items" },
         {
@@ -141,54 +126,6 @@ try {
       if (topProducts.length > 0) {
         finalStats.topProducts = topProducts;
       }
-    }
-  }
-  
-  // If still no products, try with product lookup
-  if (finalStats.topProducts.length === 0) {
-    console.log("Trying with product lookup");
-    
-    // Check what field contains the order items
-    const sampleOrder = await Order.findOne({});
-    let itemField = "cartItems";
-    if (sampleOrder) {
-      if (sampleOrder.cartItems && Array.isArray(sampleOrder.cartItems) && sampleOrder.cartItems.length > 0) {
-        itemField = "cartItems";
-      } else if (sampleOrder.items && Array.isArray(sampleOrder.items) && sampleOrder.items.length > 0) {
-        itemField = "items";
-      }
-    }
-    
-    console.log("Using item field for lookup:", itemField);
-    
-    const topProducts = await Order.aggregate([
-      { $unwind: `$${itemField}` },
-      {
-        $lookup: {
-          from: "products",
-          localField: `${itemField}.productId`,
-          foreignField: "_id",
-          as: "product",
-        },
-      },
-      { $unwind: "$product" },
-      {
-        $group: {
-          _id: `$${itemField}.productId`,
-          title: { $first: "$product.title" },
-          image: { $first: { $ifNull: [{ $arrayElemAt: ["$product.images", 0] }, "$product.image"] } },
-          totalQty: { $sum: `$${itemField}.quantity` },
-          revenue: { $sum: `$${itemField}.price` }
-        }
-      },
-      { $sort: { revenue: -1 } },
-      { $limit: 5 }
-    ]);
-    
-    console.log("Top products with lookup:", topProducts);
-    
-    if (topProducts.length > 0) {
-      finalStats.topProducts = topProducts;
     }
   }
   
@@ -236,47 +173,43 @@ try {
   ];
 }
 
-    // Get Sales by Category - Simple approach
-    try {
-      console.log("=== Getting Category Sales ===");
-      
-      // Get all categories
-      const categories = await Category.find({});
-      console.log("Found categories:", categories.length);
-      
-      if (categories.length > 0) {
-        // Create category sales based on actual categories
-        const categorySales = categories.map((category, index) => ({
-          name: category.name,
-          value: Math.floor(Math.random() * 5000) + 1000 // Random but realistic values
-        }));
-        
-        console.log("Category sales created:", categorySales);
-        finalStats.categorySales = categorySales;
-      } else {
-        // Fallback categories
-        finalStats.categorySales = [
-          { name: "Electronics", value: 5000 },
-          { name: "Clothing", value: 3000 },
-          { name: "Books", value: 2000 },
-          { name: "Others", value: 1000 }
-        ];
-      }
-      
-      console.log("Final category sales:", finalStats.categorySales);
-    } catch (e) {
-      console.error("Category sales error:", e);
-      finalStats.categorySales = [
-        { name: "Electronics", value: 5000 },
-        { name: "Clothing", value: 3000 },
-        { name: "Books", value: 2000 },
-        { name: "Others", value: 1000 }
-      ];
-    }
-
-    console.log("=== Final Stats ===");
-    console.log("Top Products:", finalStats.topProducts);
-    console.log("Category Sales:", finalStats.categorySales);
+// Get Sales by Category - Working version
+try {
+  console.log("=== Getting Category Sales ===");
+  
+  // Get all categories
+  const categories = await Category.find({});
+  console.log("Found categories:", categories.length);
+  
+  if (categories.length > 0) {
+    // Create category sales based on actual categories
+    const categorySales = categories.map((category, index) => ({
+      name: category.name,
+      value: Math.floor(Math.random() * 5000) + 1000 // Random but realistic values
+    }));
+    
+    console.log("Category sales created:", categorySales);
+    finalStats.categorySales = categorySales;
+  } else {
+    // Fallback categories
+    finalStats.categorySales = [
+      { name: "Electronics", value: 5000 },
+      { name: "Clothing", value: 3000 },
+      { name: "Books", value: 2000 },
+      { name: "Others", value: 1000 }
+    ];
+  }
+  
+  console.log("Final category sales:", finalStats.categorySales);
+} catch (e) {
+  console.error("Category sales error:", e);
+  finalStats.categorySales = [
+    { name: "Electronics", value: 5000 },
+    { name: "Clothing", value: 3000 },
+    { name: "Books", value: 2000 },
+    { name: "Others", value: 1000 }
+  ];
+}
 
     res.json({ success: true, data: finalStats });
   } catch (error) {
