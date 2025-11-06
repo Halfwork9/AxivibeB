@@ -60,185 +60,155 @@ export const getOrderStats = async (req, res) => {
 
     // Get Top 5 Products - Fixed version
     try {
-      // First check what field contains the order items
-      const sampleOrder = await Order.findOne({});
-      let itemField = "cartItems";
-      if (sampleOrder) {
-        if (sampleOrder.cartItems && Array.isArray(sampleOrder.cartItems) && sampleOrder.cartItems.length > 0) {
-          itemField = "cartItems";
-        } else if (sampleOrder.items && Array.isArray(sampleOrder.items) && sampleOrder.items.length > 0) {
-          itemField = "items";
-        }
-      }
-      
-      console.log("Using item field for products:", itemField);
-      
-      const topProducts = await Order.aggregate([
-        { $unwind: `$${itemField}` },
-        {
-          $lookup: {
-            from: "products",
-            localField: `${itemField}.productId`,
-            foreignField: "_id",
-            as: "product",
-          },
-        },
-        { $unwind: "$product" },
-        {
-          $group: {
-            _id: `$${itemField}.productId`,
-            title: { $first: "$product.title" },
-            image: { $first: { $ifNull: [{ $arrayElemAt: ["$product.images", 0] }, "$product.image"] } },
-            totalQty: { $sum: `$${itemField}.quantity` },
-            revenue: { $sum: { $multiply: [`$${itemField}.quantity`, `$${itemField}.price`] } }
-          }
-        },
-        { $sort: { revenue: -1 } },
-        { $limit: 5 }
-      ]);
-      
-      console.log("Top products result:", topProducts);
-      finalStats.topProducts = topProducts;
-    } catch (e) {
-      console.error("Top products error:", e);
-      // Fallback to simpler aggregation
-      try {
-        const sampleOrder = await Order.findOne({});
-        let itemField = "cartItems";
-        if (sampleOrder && sampleOrder.items && Array.isArray(sampleOrder.items)) {
-          itemField = "items";
-        }
-        
-        const simpleTopProducts = await Order.aggregate([
-          { $unwind: `$${itemField}` },
-          {
-            $group: {
-              _id: `$${itemField}.productId`,
-              title: { $first: `$${itemField}.title` },
-              totalQty: { $sum: `$${itemField}.quantity` },
-              revenue: { $sum: `$${itemField}.price` }
-            }
-          },
-          { $sort: { revenue: -1 } },
-          { $limit: 5 }
-        ]);
-        console.log("Simple top products result:", simpleTopProducts);
-        finalStats.topProducts = simpleTopProducts;
-      } catch (simpleError) {
-        console.error("Simple top products error:", simpleError);
-      }
+  // First check what field contains the order items
+  const sampleOrder = await Order.findOne({});
+  let itemField = "cartItems";
+  if (sampleOrder) {
+    if (sampleOrder.cartItems && Array.isArray(sampleOrder.cartItems) && sampleOrder.cartItems.length > 0) {
+      itemField = "cartItems";
+    } else if (sampleOrder.items && Array.isArray(sampleOrder.items) && sampleOrder.items.length > 0) {
+      itemField = "items";
     }
+  }
+  
+  console.log("Using item field for products:", itemField);
+  
+  const topProducts = await Order.aggregate([
+    { $unwind: `$${itemField}` },
+    {
+      $lookup: {
+        from: "products",
+        localField: `${itemField}.productId`,
+        foreignField: "_id",
+        as: "product",
+      },
+    },
+    { $unwind: "$product" },
+    {
+      $group: {
+        _id: `$${itemField}.productId`,
+        title: { $first: "$product.title" },
+        image: { $first: { $ifNull: [{ $arrayElemAt: ["$product.images", 0] }, "$product.image"] } },
+        totalQty: { $sum: `$${itemField}.quantity` },
+        revenue: { 
+          $sum: { 
+            $multiply: [
+              `$${itemField}.quantity`, 
+              {
+                $toDouble: { 
+                  $replaceAll: {
+                    input: { 
+                      $replaceAll: { 
+                        input: `$${itemField}.price`, 
+                        find: "$", 
+                        replacement: "" 
+                      } 
+                    },
+                    find: "₹",
+                    replacement: ""
+                  }
+                }
+              }
+            ] 
+          } 
+        }
+      }
+    },
+    { $sort: { revenue: -1 } },
+    { $limit: 5 }
+  ]);
+  
+  console.log("Top products result:", topProducts);
+  finalStats.topProducts = topProducts;
+} catch (e) {
+  console.error("Top products error:", e);
+  // Fallback to simpler aggregation
+  try {
+    const simpleTopProducts = await Order.aggregate([
+      { $unwind: `$${itemField}` },
+      {
+        $group: {
+          _id: `$${itemField}.productId`,
+          title: { $first: `$${itemField}.title` },
+          totalQty: { $sum: `$${itemField}.quantity` },
+          revenue: { $sum: `$${itemField}.price` }
+        }
+      },
+      { $sort: { revenue: -1 } },
+      { $limit: 5 }
+    ]);
+    console.log("Simple top products result:", simpleTopProducts);
+    finalStats.topProducts = simpleTopProducts;
+  } catch (simpleError) {
+    console.error("Simple top products error:", simpleError);
+    finalStats.topProducts = [];
+  }
+}
 
-    // Get Sales by Category - Fixed version
-    try {
-      // First check what field contains the order items
-      const sampleOrder = await Order.findOne({});
-      let itemField = "cartItems";
-      if (sampleOrder) {
-        if (sampleOrder.cartItems && Array.isArray(sampleOrder.cartItems) && sampleOrder.cartItems.length > 0) {
-          itemField = "cartItems";
-        } else if (sampleOrder.items && Array.isArray(sampleOrder.items) && sampleOrder.items.length > 0) {
-          itemField = "items";
-        }
-      }
-      
-      console.log("Using item field for categories:", itemField);
-      
-      const categorySales = await Order.aggregate([
-        { $unwind: `$${itemField}` },
-        {
-          $lookup: {
-            from: "products",
-            localField: `${itemField}.productId`,
-            foreignField: "_id",
-            as: "product",
-          },
-        },
-        { $unwind: "$product" },
-        {
-          $lookup: {
-            from: "categories",
-            localField: "product.categoryId",
-            foreignField: "_id",
-            as: "category",
-          },
-        },
-        {
-          $unwind: {
-            path: "$category",
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-        {
-          $group: {
-            _id: { $ifNull: ["$category.name", "Uncategorized"] },
-            revenue: { $sum: { $multiply: [`$${itemField}.quantity`, `$${itemField}.price`] } },
-            count: { $sum: 1 }
-          }
-        },
-        { $sort: { revenue: -1 } }
-      ]);
-      
-      console.log("Category sales result:", categorySales);
-      
-      // Format for chart
-      const formattedCategorySales = categorySales.map(c => ({
-        name: c._id,
-        value: c.revenue
-      }));
-      
-      // Check if we have real data
-      const hasRealData = formattedCategorySales.some(item => item.value > 0);
-      
-      if (hasRealData) {
-        finalStats.categorySales = formattedCategorySales;
-      } else {
-        // If no real data, use a more realistic fallback based on actual products
-        const allProducts = await Product.find({}).populate('categoryId').limit(20);
-        const categoryMap = {};
-        
-        allProducts.forEach(product => {
-          const categoryName = product.categoryId?.name || "Uncategorized";
-          if (!categoryMap[categoryName]) {
-            categoryMap[categoryName] = 0;
-          }
-          // Use a simple calculation based on price
-          categoryMap[categoryName] += product.price || 0;
-        });
-        
-        finalStats.categorySales = Object.entries(categoryMap).map(([name, value]) => ({
-          name,
-          value
-        }));
-      }
-    } catch (e) {
-      console.error("Category sales error:", e);
-      // Fallback based on actual categories
-      try {
-        const categories = await Category.find({});
-        if (categories.length > 0) {
-          finalStats.categorySales = categories.map((category, index) => ({
-            name: category.name,
-            value: Math.floor(Math.random() * 5000) + 1000 // Random but realistic values
-          }));
-        } else {
-          finalStats.categorySales = [
-            { name: "Electronics", value: 5000 },
-            { name: "Clothing", value: 3000 },
-            { name: "Books", value: 2000 },
-            { name: "Others", value: 1000 }
-          ];
-        }
-      } catch (categoryError) {
-        console.error("Category fallback error:", categoryError);
-        finalStats.categorySales = [
-          { name: "Electronics", value: 5000 },
-          { name: "Clothing", value: 3000 },
-          { name: "Books", value: 2000 },
-          { name: "Others", value: 1000 }
-        ];
-      }
+    // Get Sales by Category - Top 5 only
+try {
+  // First check what field contains the order items
+  const sampleOrder = await Order.findOne({});
+  let itemField = "cartItems";
+  if (sampleOrder) {
+    if (sampleOrder.cartItems && Array.isArray(sampleOrder.cartItems) && sampleOrder.cartItems.length > 0) {
+      itemField = "cartItems";
+    } else if (sampleOrder.items && Array.isArray(sampleOrder.items) && sampleOrder.items.length > 0) {
+      itemField = "items";
     }
+  }
+  
+  console.log("Using item field for categories:", itemField);
+  
+  const categorySales = await Order.aggregate([
+    { $unwind: `$${itemField}` },
+    {
+      $lookup: {
+        from: "products",
+        localField: `${itemField}.productId`,
+        foreignField: "_id",
+        as: "product",
+      },
+    },
+    { $unwind: "$product" },
+    {
+      $lookup: {
+        from: "categories",
+        localField: "product.categoryId",
+        foreignField: "_id",
+        as: "category",
+      },
+    },
+    {
+      $unwind: {
+        path: "$category",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $group: {
+        _id: { $ifNull: ["$category.name", "Uncategorized"] },
+        revenue: { $sum: { $multiply: [`$${itemField}.quantity`, `$${itemField}.price`] } },
+        count: { $sum: 1 }
+      }
+    },
+    { $sort: { revenue: -1 } },
+    { $limit: 5 } // Only get top 5 categories
+  ]);
+  
+  console.log("Category sales result:", categorySales);
+  
+  // Format for chart
+  const formattedCategorySales = categorySales.map(c => ({
+    name: c._id,
+    value: c.revenue
+  }));
+  
+  finalStats.categorySales = formattedCategorySales;
+} catch (e) {
+  console.error("Category sales error:", e);
+  finalStats.categorySales = [];
+}
 
     res.json({ success: true, data: finalStats });
   } catch (error) {
