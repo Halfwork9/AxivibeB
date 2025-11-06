@@ -11,48 +11,27 @@ export const getOrderStats = async (req, res) => {
       pendingOrders: 0,
       deliveredOrders: 0,
       totalCustomers: 0,
-      revenueGrowthPercentage: 0,
       topProducts: [],
-      ordersChange: { value: 0, percentage: 0 },
-      pendingChange: { value: 0, percentage: 0 },
-      deliveredChange: { value: 0, percentage: 0 },
-      customersChange: { value: 0, percentage: 0 },
-      lowStock: [],
-      confirmedOrders: 0,
-      shippedOrders: 0,
       categorySales: [],
+      lowStock: [],
     };
 
     // ─────────────────────────────────────
-    // 1. BASIC COUNTS
+    // BASIC STATS
     // ─────────────────────────────────────
-    const [totalOrders, pendingOrders, deliveredOrders, confirmedOrders, shippedOrders, customers] = await Promise.all([
-      Order.countDocuments(),
-      Order.countDocuments({ orderStatus: /pending/i }),
-      Order.countDocuments({ orderStatus: /delivered/i }),
-      Order.countDocuments({ orderStatus: /confirmed/i }),
-      Order.countDocuments({ orderStatus: /shipped/i }),
+    const [orders, customers] = await Promise.all([
+      Order.find({}),
       Order.distinct("userId"),
     ]);
 
-    finalStats.totalOrders = totalOrders;
-    finalStats.pendingOrders = pendingOrders;
-    finalStats.deliveredOrders = deliveredOrders;
-    finalStats.confirmedOrders = confirmedOrders;
-    finalStats.shippedOrders = shippedOrders;
+    finalStats.totalOrders = orders.length;
+    finalStats.totalRevenue = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+    finalStats.pendingOrders = orders.filter(o => /pending/i.test(o.orderStatus)).length;
+    finalStats.deliveredOrders = orders.filter(o => /delivered/i.test(o.orderStatus)).length;
     finalStats.totalCustomers = customers.length;
 
     // ─────────────────────────────────────
-    // 2. TOTAL REVENUE (Delivered + Confirmed)
-    // ─────────────────────────────────────
-    const revenueAgg = await Order.aggregate([
-      { $match: { orderStatus: { $in: [/delivered/i, /confirmed/i] } } },
-      { $group: { _id: null, total: { $sum: "$totalAmount" } } },
-    ]);
-    finalStats.totalRevenue = revenueAgg[0]?.total || 0;
-
-    // ─────────────────────────────────────
-    // 3. LOW STOCK
+    // LOW STOCK
     // ─────────────────────────────────────
     finalStats.lowStock = await Product.find({ totalStock: { $lt: 10 } })
       .select("title totalStock")
@@ -60,7 +39,7 @@ export const getOrderStats = async (req, res) => {
       .lean();
 
     // ─────────────────────────────────────
-    // 4. TOP 5 PRODUCTS (REAL DATA)
+    // TOP 5 PRODUCTS (FIXED)
     // ─────────────────────────────────────
     const topProducts = await Order.aggregate([
       { $match: { "cartItems.0": { $exists: true } } },
@@ -77,12 +56,10 @@ export const getOrderStats = async (req, res) => {
       {
         $group: {
           _id: "$cartItems.productId",
-          title: { $first: "$product.title" },
+          title: { $first: { $ifNull: ["$product.title", "$cartItems.title"] } },
           image: { $first: { $arrayElemAt: ["$product.images", 0] } },
           totalQty: { $sum: "$cartItems.quantity" },
-          revenue: {
-            $sum: { $multiply: ["$cartItems.quantity", { $toDouble: "$cartItems.price" }] }
-          },
+          revenue: { $sum: { $multiply: ["$cartItems.quantity", "$cartItems.price"] } },
         },
       },
       { $sort: { revenue: -1 } },
@@ -98,7 +75,7 @@ export const getOrderStats = async (req, res) => {
     }));
 
     // ─────────────────────────────────────
-    // 5. SALES BY CATEGORY (REAL DATA)
+    // SALES BY CATEGORY (FIXED)
     // ─────────────────────────────────────
     const categorySales = await Order.aggregate([
       { $match: { "cartItems.0": { $exists: true } } },
@@ -124,9 +101,7 @@ export const getOrderStats = async (req, res) => {
       {
         $group: {
           _id: "$category.name",
-          value: {
-            $sum: { $multiply: ["$cartItems.quantity", { $toDouble: "$cartItems.price" }] }
-          },
+          value: { $sum: { $multiply: ["$cartItems.quantity", "$cartItems.price"] } },
         },
       },
       { $sort: { value: -1 } },
@@ -134,12 +109,8 @@ export const getOrderStats = async (req, res) => {
 
     finalStats.categorySales = categorySales
       .filter(c => c._id && c.value > 0)
-      .map(c => ({
-        name: c._id,
-        value: c.value,
-      }));
+      .map(c => ({ name: c._id, value: c.value }));
 
-    // ─────────────────────────────────────
     res.json({ success: true, data: finalStats });
   } catch (error) {
     console.error("getOrderStats ERROR:", error);
