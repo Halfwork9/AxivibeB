@@ -5,7 +5,7 @@ import {
   getOrderDetailsForAdmin,
   updateOrderStatus,
   updatePaymentStatus,
-  debugOrderStatuses,
+  debugCategoryData,
 } from "../../controllers/admin/order-controller.js";
 
 import {
@@ -20,7 +20,8 @@ router.get("/get", getAllOrdersOfAllUsers);
 router.get("/details/:id", getOrderDetailsForAdmin);
 router.put("/update/:id", updateOrderStatus);
 router.put("/:id/payment-status", updatePaymentStatus);
-router.get("/debug-statuses", debugOrderStatuses);
+// In your admin order routes file
+router.get("/debug-category", debugCategoryData);
 
 // ────── NEW ANALYTICS ROUTES ──────
 router.get("/stats", getOrderStats);
