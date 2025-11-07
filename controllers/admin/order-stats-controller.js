@@ -136,23 +136,40 @@ export const getOrderStats = async (req, res) => {
     //------------------------------------------------
     // 6) Top Customers (lifetime)
     //------------------------------------------------
+let topCustomers = [];
+try {
+  const topCustAgg = await Order.aggregate([
+    {
+      $group: {
+        _id: "$userId",
+        totalSpent: { $sum: "$totalAmount" },
+        orderCount: { $sum: 1 },
+      },
+    },
+    { $sort: { totalSpent: -1 } },
+    { $limit: 5 },
+  ]);
 
-const topCustomers = await Promise.all(
-  topCustAgg.map(async (c) => {
-    const user = await User.findById(c._id).select("userName email");
-    return {
-      userId: c._id,
-      name: user?.userName || "Unknown",
-      email: user?.email || "",
-      orderCount: c.orderCount,
-      totalSpent: c.totalSpent,
-    };
-  })
-);
+  topCustomers = await Promise.all(
+    topCustAgg.map(async (c) => {
+      if (!c._id) return null;
 
-finalStats.topCustomers = topCustomers;
+      const user = await User.findById(c._id).select("userName email");
 
+      return {
+        userId: c._id,
+        name: user?.userName || "Unknown",
+        email: user?.email || "",
+        orderCount: c.orderCount,
+        totalSpent: c.totalSpent,
+      };
+    })
+  );
 
+  finalStats.topCustomers = topCustomers.filter(Boolean);
+} catch (err) {
+  console.log("⚠ topCustomers error →", err.message);
+}
 
     //------------------------------------------------
     // 7) Brand Sales Performance (lifetime)
