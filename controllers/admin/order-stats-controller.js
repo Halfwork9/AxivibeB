@@ -57,20 +57,25 @@ export const getOrderStats = async (req, res) => {
 
 
     // ===== TOP PRODUCTS by revenue =====
-    const topProducts = await Order.aggregate([
+  const topProducts = await Order.aggregate([
+  { 
+    $match: { 
+      orderStatus: { $in: ["delivered", "confirmed"] } 
+    } 
+  },
   { $unwind: "$cartItems" },
 
   {
     $group: {
       _id: "$cartItems.productId",
       totalQty: {
-        $sum: { $toDouble: "$cartItems.quantity" }
+        $sum: { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } }
       },
       revenue: {
         $sum: {
           $multiply: [
-            { $toDouble: "$cartItems.quantity" },
-            { $toDouble: "$cartItems.price" }
+            { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } },
+            { $toDouble: { $ifNull: ["$cartItems.price", 0] } }
           ]
         }
       }
@@ -90,21 +95,25 @@ export const getOrderStats = async (req, res) => {
   {
     $project: {
       _id: 1,
+      title: "$product.title",
       totalQty: 1,
-      revenue: 1,
-      title: "$product.title"
+      revenue: 1
     }
   },
   { $sort: { revenue: -1 } },
   { $limit: 5 }
 ]);
 
-finalStats.topProducts = topProducts;
 
 
 
     // ===== CATEGORY SALES (top 5) =====
-   const categorySales = await Order.aggregate([
+const categorySales = await Order.aggregate([
+  { 
+    $match: { 
+      orderStatus: { $in: ["delivered", "confirmed"] } 
+    } 
+  },
   { $unwind: "$cartItems" },
 
   {
@@ -113,8 +122,8 @@ finalStats.topProducts = topProducts;
       revenue: {
         $sum: {
           $multiply: [
-            { $toDouble: "$cartItems.quantity" },
-            { $toDouble: "$cartItems.price" }
+            { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } },
+            { $toDouble: { $ifNull: ["$cartItems.price", 0] } }
           ]
         }
       }
@@ -159,7 +168,6 @@ finalStats.topProducts = topProducts;
   { $limit: 5 }
 ]);
 
-finalStats.categorySales = categorySales;
 
 const check = await Order.find({ cartItems: { $exists: true, $ne: [] } })
   .select("cartItems")
