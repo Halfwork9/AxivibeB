@@ -136,83 +136,73 @@ export const getOrderStats = async (req, res) => {
     // 6) Top Customers (lifetime)
     //------------------------------------------------
 
-try {
-  const topCustAgg = await Order.aggregate([
-    {
-      $group: {
-        _id: "$userId",
-        totalSpent: { $sum: "$totalAmount" },
-        orderCount: { $sum: 1 },
-        name: { $first: "$addressInfo.name" },        // ✅ fallback name
-        userName: { $first: "$userName" },            // if you store
-        email: { $first: "$addressInfo.email" },
-      }
-    },
-    { $sort: { totalSpent: -1 } },
-    { $limit: 5 }
-  ]);
+const topCustAgg = await Order.aggregate([
+  {
+    $group: {
+      _id: "$userId",
+      totalSpent: { $sum: "$totalAmount" },
+      orderCount: { $sum: 1 },
+      name: { $first: "$addressInfo.name" },
+      phone: { $first: "$addressInfo.phone" },
+    }
+  },
+  { $sort: { totalSpent: -1 } },
+  { $limit: 5 }
+]);
 
-  finalStats.topCustomers = topCustAgg.map((c) => ({
-    userId: c._id,
-    name: c.userName || c.name || "Unknown",
-    email: c.email || "",
-    totalSpent: c.totalSpent,
-    orderCount: c.orderCount,
-  }));
-} catch {}
+finalStats.topCustomers = topCustAgg.map((c) => ({
+  userId: c._id,
+  name: c.name || c.phone || "Unknown",
+  orderCount: c.orderCount,
+  totalSpent: c.totalSpent,
+}));
 
 
     //------------------------------------------------
     // 7) Brand Sales Performance (lifetime)
     //------------------------------------------------
 
-try {
-  const brandAgg = await Order.aggregate([
-    { $match: { [itemField]: { $exists: true, $ne: [] } } },
-    { $unwind: `$${itemField}` },
+const brandAgg = await Order.aggregate([
+  { $match: { cartItems: { $exists: true, $ne: [] } } },
+  { $unwind: "$cartItems" },
 
-    {
-      $addFields: {
-        qty: { $toDouble: { $ifNull: [`$${itemField}.quantity`, 0] } },
-        price: { $toDouble: { $ifNull: [`$${itemField}.price`, 0] } },
-      }
+  {
+    $lookup: {
+      from: "products",
+      localField: "cartItems.productId",
+      foreignField: "_id",
+      as: "product",
     },
+  },
+  { $unwind: "$product" },
 
-    {
-      $lookup: {
-        from: "products",
-        localField: `${itemField}.productId`,
-        foreignField: "_id",
-        as: "product",
-      }
+  {
+    $lookup: {
+      from: "brands",
+      localField: "product.brandId",
+      foreignField: "_id",
+      as: "brand",
     },
-    { $unwind: "$product" },
+  },
+  { $unwind: "$brand" },
 
-    {
-      $lookup: {
-        from: "brands",
-        localField: "product.brandId",
-        foreignField: "_id",
-        as: "brand",
-      }
+  {
+    $group: {
+      _id: "$brand._id",
+      brand: { $first: "$brand.name" },
+      qty: { $sum: "$cartItems.quantity" },
+      revenue: {
+        $sum: {
+          $multiply: ["$cartItems.quantity", "$cartItems.price"],
+        },
+      },
     },
-    { $unwind: "$brand" },
+  },
+  { $sort: { revenue: -1 } },
+  { $limit: 5 },
+]);
 
-    {
-      $group: {
-        _id: "$brand._id",
-        brand: { $first: "$brand.name" },
-        revenue: { $sum: { $multiply: ["$qty", "$price"] } },
-        qty: { $sum: "$qty" }
-      }
-    },
-
-    { $sort: { revenue: -1 } },
-    { $limit: 5 }
-  ]);
-
-  finalStats.brandSalesPerformance = brandAgg;
-} catch {}
+finalStats.brandSalesPerformance = brandAgg;
 
 
     //------------------------------------------------
