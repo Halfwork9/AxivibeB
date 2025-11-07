@@ -110,26 +110,29 @@ finalStats.topProducts = topProducts;
 const categorySales = await Order.aggregate([
   {
     $match: {
-      orderStatus: { $in: ["delivered", "confirmed"] }
+      orderStatus: { $in: ["delivered", "confirmed"] }   // ✅ keep only valid orders
     }
   },
 
-  { $unwind: "$cartItems" },
+  { $unwind: "$cartItems" },   // break each order item
 
+  // Group revenue + qty by productId
   {
     $group: {
       _id: "$cartItems.productId",
+      totalQty: { $sum: { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } } },
       revenue: {
         $sum: {
           $multiply: [
-            { $toDouble: "$cartItems.quantity" },
-            { $toDouble: "$cartItems.price" }
+            { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } },
+            { $toDouble: { $ifNull: ["$cartItems.price", 0] } }
           ]
         }
       }
     }
   },
 
+  // Join with products collection → get category
   {
     $lookup: {
       from: "products",
@@ -140,13 +143,17 @@ const categorySales = await Order.aggregate([
   },
   { $unwind: "$product" },
 
+  // Group by category
   {
     $group: {
       _id: "$product.categoryId",
-      revenue: { $sum: "$revenue" }
+      totalRevenue: { $sum: "$revenue" },
+      totalQty: { $sum: "$totalQty" },
+      products: { $push: "$product.title" }     // optional → shows product list
     }
   },
 
+  // Join category name
   {
     $lookup: {
       from: "categories",
@@ -160,16 +167,20 @@ const categorySales = await Order.aggregate([
   {
     $project: {
       _id: 0,
+      categoryId: "$_id",
       name: "$category.name",
-      value: "$revenue"
+      totalRevenue: 1,
+      totalQty: 1,
+      products: 1   // optional → list of product names inside category
     }
   },
 
-  { $sort: { value: -1 } },
+  { $sort: { totalRevenue: -1 } },
   { $limit: 5 }
 ]);
 
 finalStats.categorySales = categorySales;
+
 
 
     console.log("✅ FINAL STATS SENT");
