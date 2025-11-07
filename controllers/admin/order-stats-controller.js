@@ -108,79 +108,84 @@ export const getOrderStats = async (req, res) => {
     finalStats.returnRate =
       totalOrders > 0 ? Number(((returned / totalOrders) * 100).toFixed(2)) : 0;
 
-    //------------------------------------------------
-    // 7) Top Customers (Lifetime revenue)
-    //------------------------------------------------
-    const topCustomers = await Order.aggregate([
-      {
-        $group: {
-          _id: "$userId",
-          orders: { $sum: 1 },
-          totalSpent: { $sum: "$totalAmount" },
-        },
-      },
-      {
-        $lookup: {
-          from: "users",
-          localField: "_id",
-          foreignField: "_id",
-          as: "user",
-        },
-      },
-      { $unwind: "$user" },
-      {
-        $project: {
-          userId: "$_id",
-          userName: "$user.userName",
-          orders: 1,
-          totalSpent: 1,
-        },
-      },
-      { $sort: { totalSpent: -1 } },
-      { $limit: 5 },
-    ]);
-    finalStats.topCustomers = topCustomers;
+   // ──────────────────────────────
+// ✅ TOP CUSTOMERS (LIFETIME)
+// ──────────────────────────────
+const topCustomersAgg = await Order.aggregate([
+  {
+    $group: {
+      _id: "$userId",
+      totalSpent: { $sum: "$totalAmount" },
+      orderCount: { $sum: 1 },
+    },
+  },
+  { $sort: { totalSpent: -1 } },
+  { $limit: 5 },
+]);
 
-    //------------------------------------------------
-    // 8) Brand Sales Performance
-    //------------------------------------------------
-    const brandSales = await Order.aggregate([
-      { $unwind: "$cartItems" },
-      {
-        $lookup: {
-          from: "products",
-          localField: "cartItems.productId",
-          foreignField: "_id",
-          as: "product",
-        },
-      },
-      { $unwind: "$product" },
-      {
-        $lookup: {
-          from: "brands",
-          localField: "product.brandId",
-          foreignField: "_id",
-          as: "brand",
-        },
-      },
-      { $unwind: "$brand" },
-      {
-        $group: {
-          _id: "$brand.name",
-          revenue: {
-            $sum: {
-              $multiply: ["$cartItems.quantity", "$cartItems.price"],
-            },
-          },
-        },
-      },
-      { $sort: { revenue: -1 } },
-    ]);
+// hydrate user
+const topCustomers = await Promise.all(
+  topCustomersAgg.map(async (c) => {
+    try {
+      const user = await mongoose.model("User").findById(c._id).select("userName email");
+      return {
+        userId: c._id,
+        name: user?.userName || "Unknown",
+        email: user?.email || "",
+        totalSpent: c.totalSpent,
+        orderCount: c.orderCount,
+      };
+    } catch {
+      return null;
+    }
+  })
+);
 
-    finalStats.brandSales = brandSales.map((b) => ({
-      brand: b._id,
-      revenue: b.revenue,
-    }));
+finalStats.topCustomers = topCustomers.filter(Boolean);
+
+// ──────────────────────────────
+// ✅ BRAND SALES PERFORMANCE
+// ──────────────────────────────
+const brandAgg = await Order.aggregate([
+  { $unwind: `$${itemField}` },
+  {
+    $lookup: {
+      from: "products",
+      localField: `${itemField}.productId`,
+      foreignField: "_id",
+      as: "product",
+    },
+  },
+  { $unwind: "$product" },
+  {
+    $group: {
+      _id: "$product.brandId",
+      revenue: { $sum: { $multiply: [`$${itemField}.quantity`, `$${itemField}.price`] } },
+      qty: { $sum: `$${itemField}.quantity` },
+    },
+  },
+  { $sort: { revenue: -1 } },
+  { $limit: 5 },
+]);
+
+// hydrate brand
+const brands = await Promise.all(
+  brandAgg.map(async (b) => {
+    try {
+      const brand = await mongoose.model("Brand").findById(b._id).select("name");
+      return {
+        brandId: b._id,
+        brand: brand?.name || "Unknown",
+        revenue: b.revenue,
+        qty: b.qty,
+      };
+    } catch {
+      return null;
+    }
+  })
+);
+
+finalStats.brandSalesPerformance = brands.filter(Boolean);
 
     //------------------------------------------------
     // 9) Payment Method Distribution
