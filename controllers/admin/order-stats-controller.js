@@ -55,26 +55,22 @@ export const getOrderStats = async (req, res) => {
     finalStats.lowStock = lowStock;
     finalStats.totalRevenue = revenueData[0]?.total || 0;
 
-// ===== TOP PRODUCTS by revenue =====
-const topProducts = await Order.aggregate([
-  // ✅ Only consider orders that were actually completed
-  {
-    $match: {
-      orderStatus: { $in: ["delivered", "confirmed"] }
-    }
-  },
 
+//  TOP PRODUCTS (lifetime)
+const topProducts = await Order.aggregate([
   { $unwind: "$cartItems" },
 
   {
     $group: {
       _id: "$cartItems.productId",
-      totalQty: { $sum: { $toDouble: "$cartItems.quantity" } },
+      totalQty: {
+        $sum: { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } }
+      },
       revenue: {
         $sum: {
           $multiply: [
-            { $toDouble: "$cartItems.quantity" },
-            { $toDouble: "$cartItems.price" }
+            { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } },
+            { $toDouble: { $ifNull: ["$cartItems.price", 0] } }
           ]
         }
       }
@@ -96,24 +92,17 @@ const topProducts = await Order.aggregate([
       _id: 1,
       title: "$product.title",
       totalQty: 1,
-      revenue: 1,
+      revenue: 1
     }
   },
+
   { $sort: { revenue: -1 } },
   { $limit: 5 }
 ]);
 
 finalStats.topProducts = topProducts;
 
-
-// ===== CATEGORY SALES (top 5) =====
 const categorySales = await Order.aggregate([
-  {
-    $match: {
-      orderStatus: { $in: ["delivered", "confirmed"] }
-    }
-  },
-
   { $unwind: "$cartItems" },
 
   {
@@ -137,7 +126,7 @@ const categorySales = await Order.aggregate([
           ]
         }
       },
-      totalQty: { $sum: { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } } }
+      totalQty: { $sum: { $toDouble: "$cartItems.quantity" } }
     }
   },
 
@@ -166,8 +155,6 @@ const categorySales = await Order.aggregate([
 ]);
 
 finalStats.categorySales = categorySales;
-
-
 
 
     console.log("✅ FINAL STATS SENT");
