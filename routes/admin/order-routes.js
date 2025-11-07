@@ -11,7 +11,6 @@ import {
 import {
   getOrderStats,
   getSalesOverview,
-  debugDataStructure,  // Add this import
 } from "../../controllers/admin/order-stats-controller.js";
 
 const router = express.Router();
@@ -21,10 +20,6 @@ router.get("/get", getAllOrdersOfAllUsers);
 router.get("/details/:id", getOrderDetailsForAdmin);
 router.put("/update/:id", updateOrderStatus);
 router.put("/:id/payment-status", updatePaymentStatus);
-router.get("/debug-category", debugCategoryData);
-
-// Add the debug endpoint
-router.get("/debug", debugDataStructure);
 
 // ────── NEW ANALYTICS ROUTES ──────
 router.get("/stats", getOrderStats);
