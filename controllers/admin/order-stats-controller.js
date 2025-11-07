@@ -110,50 +110,37 @@ finalStats.topProducts = topProducts;
 const categorySales = await Order.aggregate([
   {
     $match: {
-      orderStatus: { $in: ["delivered", "confirmed"] }   // ✅ keep only valid orders
+      orderStatus: { $in: ["delivered", "confirmed"] }
     }
   },
 
-  { $unwind: "$cartItems" },   // break each order item
+  { $unwind: "$cartItems" },
 
-  // Group revenue + qty by productId
-  {
-    $group: {
-      _id: "$cartItems.productId",
-      totalQty: { $sum: { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } } },
-      revenue: {
-        $sum: {
-          $multiply: [
-            { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } },
-            { $toDouble: { $ifNull: ["$cartItems.price", 0] } }
-          ]
-        }
-      }
-    }
-  },
-
-  // Join with products collection → get category
   {
     $lookup: {
       from: "products",
-      localField: "_id",
+      localField: "cartItems.productId",
       foreignField: "_id",
       as: "product"
     }
   },
   { $unwind: "$product" },
 
-  // Group by category
   {
     $group: {
       _id: "$product.categoryId",
-      totalRevenue: { $sum: "$revenue" },
-      totalQty: { $sum: "$totalQty" },
-      products: { $push: "$product.title" }     // optional → shows product list
+      totalRevenue: {
+        $sum: {
+          $multiply: [
+            { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } },
+            { $toDouble: { $ifNull: ["$cartItems.price", 0] } }
+          ]
+        }
+      },
+      totalQty: { $sum: { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } } }
     }
   },
 
-  // Join category name
   {
     $lookup: {
       from: "categories",
@@ -169,17 +156,17 @@ const categorySales = await Order.aggregate([
       _id: 0,
       categoryId: "$_id",
       name: "$category.name",
-      totalRevenue: 1,
-      totalQty: 1,
-      products: 1   // optional → list of product names inside category
+      value: "$totalRevenue",
+      totalQty: 1
     }
   },
 
-  { $sort: { totalRevenue: -1 } },
+  { $sort: { value: -1 } },
   { $limit: 5 }
 ]);
 
 finalStats.categorySales = categorySales;
+
 
 
 
