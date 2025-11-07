@@ -1,8 +1,21 @@
 // src/controllers/admin/order-stats-controller.js
+import mongoose from "mongoose";
 import Order from "../../models/Order.js";
 import Product from "../../models/Product.js";
 import Category from "../../models/Category.js";
-import Brand from "../../models/Brand.js"; // ✅ brand support
+import Brand from "../../models/Brand.js";
+
+//------------------------------------------------
+// Helper: detect the item array field present in orders
+//------------------------------------------------
+async function detectItemField() {
+  const hasCart = await Order.exists({ cartItems: { $exists: true, $ne: [] } });
+  if (hasCart) return "cartItems";
+  const hasItems = await Order.exists({ items: { $exists: true, $ne: [] } });
+  if (hasItems) return "items";
+  // default to cartItems if nothing found (prevents crashes on empty DB)
+  return "cartItems";
+}
 
 //------------------------------------------------
 // GET /admin/orders/stats
@@ -10,214 +23,322 @@ import Brand from "../../models/Brand.js"; // ✅ brand support
 export const getOrderStats = async (req, res) => {
   try {
     const finalStats = {
+      // Core KPIs
       totalOrders: 0,
       totalRevenue: 0,
       pendingOrders: 0,
       deliveredOrders: 0,
       totalCustomers: 0,
-      revenueGrowthPercentage: 0,
+      revenueGrowthPercentage: 0, // (left 0 unless you want month-over-month calc)
 
-      // ✅ NEW
-      topCustomers: [],
-      brandSales: [],
-      paymentMethodBreakdown: [],
-      cancelRate: 0,
-      returnRate: 0,
-      avgOrderValue: 0,
+      // New analytics
+      topCustomers: [],                // [{ userId, name, email, totalSpent, orderCount }]
+      brandSales: [],                  // [{ brand, revenue, qty }]
+      paymentMethodBreakdown: [],      // [{ method, count }]
+      cancelRate: 0,                   // %
+      returnRate: 0,                   // %
+      avgOrderValue: 0,                // number
       repeatCustomers: 0,
-      repeatCustomerRate: 0,
+      repeatCustomerRate: 0,           // %
 
-      // Old useful metrics
-      lowStock: [],
+      // Still useful
+      lowStock: [],                    // [{ _id, title, totalStock }]
       confirmedOrders: 0,
       shippedOrders: 0,
+
+      // Legacy charts people still like
+      topProducts: [],                 // [{ _id, title, image, totalQty, revenue }]
+      categorySales: [],               // [{ name, value }]
     };
 
+    // Detect items field
+    const itemField = await detectItemField();
+
     //------------------------------------------------
-    // 1) Counts
+    // 1) Basic counts
     //------------------------------------------------
-    const totalOrders = await Order.countDocuments();
-    const deliveredOrders = await Order.countDocuments({
-      orderStatus: /delivered|completed|shipped/i,
-    });
-    const pendingOrders = await Order.countDocuments({
-      orderStatus: /pending|processing|confirmed/i,
-    });
-    const confirmedOrders = await Order.countDocuments({
-      orderStatus: /confirmed/i,
-    });
-    const shippedOrders = await Order.countDocuments({
-      orderStatus: /shipped/i,
-    });
+    const [
+      totalOrders,
+      deliveredOrders,
+      pendingOrders,
+      confirmedOrders,
+      shippedOrders,
+      uniqueCustomers,
+    ] = await Promise.all([
+      Order.countDocuments(),
+      Order.countDocuments({ orderStatus: /delivered|completed|shipped/i }),
+      Order.countDocuments({ orderStatus: /pending|processing|confirmed/i }),
+      Order.countDocuments({ orderStatus: /confirmed/i }),
+      Order.countDocuments({ orderStatus: /shipped/i }),
+      Order.distinct("userId"),
+    ]);
 
     finalStats.totalOrders = totalOrders;
     finalStats.deliveredOrders = deliveredOrders;
     finalStats.pendingOrders = pendingOrders;
     finalStats.confirmedOrders = confirmedOrders;
     finalStats.shippedOrders = shippedOrders;
-
-    //------------------------------------------------
-    // 2) Unique Customers
-    //------------------------------------------------
-    const uniqueCustomers = await Order.distinct("userId");
     finalStats.totalCustomers = uniqueCustomers.length;
 
     //------------------------------------------------
-    // 3) Low Stock Products
+    // 2) Low stock
     //------------------------------------------------
-    finalStats.lowStock = await Product.find({ totalStock: { $lt: 10 } })
-      .select("title totalStock")
-      .limit(5)
-      .lean();
-
-    //------------------------------------------------
-    // 4) Revenue + AOV
-    //------------------------------------------------
-    const revenueAgg = await Order.aggregate([
-      { $group: { _id: null, total: { $sum: "$totalAmount" } } },
-    ]);
-
-    const revenue = revenueAgg[0]?.total ?? 0;
-    finalStats.totalRevenue = revenue;
-    finalStats.avgOrderValue =
-      totalOrders > 0 ? Number((revenue / totalOrders).toFixed(2)) : 0;
-
-    //------------------------------------------------
-    // 5) Repeat Customers
-    //------------------------------------------------
-    const customerOrderCount = await Order.aggregate([
-      { $group: { _id: "$userId", count: { $sum: 1 } } },
-    ]);
-
-    const repeatUsers = customerOrderCount.filter((u) => u.count > 1).length;
-    finalStats.repeatCustomers = repeatUsers;
-    finalStats.repeatCustomerRate =
-      uniqueCustomers.length > 0
-        ? Number(((repeatUsers / uniqueCustomers.length) * 100).toFixed(2))
-        : 0;
-
-    //------------------------------------------------
-    // 6) Return + Cancellation Rate
-    //------------------------------------------------
-    const cancelled = await Order.countDocuments({ orderStatus: /cancel/i });
-    const returned = await Order.countDocuments({ orderStatus: /return/i });
-
-    finalStats.cancelRate =
-      totalOrders > 0 ? Number(((cancelled / totalOrders) * 100).toFixed(2)) : 0;
-
-    finalStats.returnRate =
-      totalOrders > 0 ? Number(((returned / totalOrders) * 100).toFixed(2)) : 0;
-
-   // ──────────────────────────────
-// ✅ TOP CUSTOMERS (LIFETIME)
-// ──────────────────────────────
-const topCustomersAgg = await Order.aggregate([
-  {
-    $group: {
-      _id: "$userId",
-      totalSpent: { $sum: "$totalAmount" },
-      orderCount: { $sum: 1 },
-    },
-  },
-  { $sort: { totalSpent: -1 } },
-  { $limit: 5 },
-]);
-
-// hydrate user
-const topCustomers = await Promise.all(
-  topCustomersAgg.map(async (c) => {
     try {
-      const user = await mongoose.model("User").findById(c._id).select("userName email");
-      return {
-        userId: c._id,
-        name: user?.userName || "Unknown",
-        email: user?.email || "",
-        totalSpent: c.totalSpent,
-        orderCount: c.orderCount,
-      };
-    } catch {
-      return null;
-    }
-  })
-);
+      finalStats.lowStock = await Product.find({ totalStock: { $lt: 10 } })
+        .select("title totalStock")
+        .limit(5)
+        .lean();
+    } catch {}
 
-finalStats.topCustomers = topCustomers.filter(Boolean);
-
-// ──────────────────────────────
-// ✅ BRAND SALES PERFORMANCE
-// ──────────────────────────────
-const brandAgg = await Order.aggregate([
-  { $unwind: `$${itemField}` },
-  {
-    $lookup: {
-      from: "products",
-      localField: `${itemField}.productId`,
-      foreignField: "_id",
-      as: "product",
-    },
-  },
-  { $unwind: "$product" },
-  {
-    $group: {
-      _id: "$product.brandId",
-      revenue: { $sum: { $multiply: [`$${itemField}.quantity`, `$${itemField}.price`] } },
-      qty: { $sum: `$${itemField}.quantity` },
-    },
-  },
-  { $sort: { revenue: -1 } },
-  { $limit: 5 },
-]);
-
-// hydrate brand
-const brands = await Promise.all(
-  brandAgg.map(async (b) => {
+    //------------------------------------------------
+    // 3) Revenue & AOV (lifetime)
+    //------------------------------------------------
     try {
-      const brand = await mongoose.model("Brand").findById(b._id).select("name");
-      return {
-        brandId: b._id,
-        brand: brand?.name || "Unknown",
-        revenue: b.revenue,
-        qty: b.qty,
-      };
-    } catch {
-      return null;
-    }
-  })
-);
-
-finalStats.brandSalesPerformance = brands.filter(Boolean);
+      const revenueAgg = await Order.aggregate([
+        { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+      ]);
+      const revenue = revenueAgg[0]?.total ?? 0;
+      finalStats.totalRevenue = revenue;
+      finalStats.avgOrderValue =
+        totalOrders > 0 ? Number((revenue / totalOrders).toFixed(2)) : 0;
+    } catch {}
 
     //------------------------------------------------
-    // 9) Payment Method Distribution
+    // 4) Repeat Customers
     //------------------------------------------------
-    const paymentDist = await Order.aggregate([
-      {
-        $group: {
-          _id: "$paymentMethod",
-          count: { $sum: 1 },
+    try {
+      const customerOrderCount = await Order.aggregate([
+        { $group: { _id: "$userId", count: { $sum: 1 } } },
+      ]);
+      const repeatUsers = customerOrderCount.filter((u) => (u?.count || 0) > 1).length;
+      finalStats.repeatCustomers = repeatUsers;
+      finalStats.repeatCustomerRate =
+        uniqueCustomers.length > 0
+          ? Number(((repeatUsers / uniqueCustomers.length) * 100).toFixed(2))
+          : 0;
+    } catch {}
+
+    //------------------------------------------------
+    // 5) Cancellation & Return rates
+    //------------------------------------------------
+    try {
+      const [cancelled, returned] = await Promise.all([
+        Order.countDocuments({ orderStatus: /cancel/i }),
+        Order.countDocuments({ orderStatus: /return/i }),
+      ]);
+      finalStats.cancelRate =
+        totalOrders > 0 ? Number(((cancelled / totalOrders) * 100).toFixed(2)) : 0;
+      finalStats.returnRate =
+        totalOrders > 0 ? Number(((returned / totalOrders) * 100).toFixed(2)) : 0;
+    } catch {}
+
+    //------------------------------------------------
+    // 6) Top Customers (lifetime)
+    //------------------------------------------------
+    try {
+      const topCustomersAgg = await Order.aggregate([
+        {
+          $group: {
+            _id: "$userId",
+            totalSpent: { $sum: "$totalAmount" },
+            orderCount: { $sum: 1 },
+          },
         },
-      },
-    ]);
+        { $sort: { totalSpent: -1 } },
+        { $limit: 5 },
+      ]);
 
-    finalStats.paymentMethodBreakdown = paymentDist.map((p) => ({
-      method: p._id,
-      count: p.count,
-    }));
+      const topCustomers = await Promise.all(
+        topCustomersAgg.map(async (c) => {
+          try {
+            const user = await mongoose
+              .model("User")
+              .findById(c._id)
+              .select("userName email")
+              .lean();
+            return {
+              userId: c._id,
+              name: user?.userName || "Unknown",
+              email: user?.email || "",
+              totalSpent: c.totalSpent || 0,
+              orderCount: c.orderCount || 0,
+            };
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      finalStats.topCustomers = topCustomers.filter(Boolean);
+    } catch {}
 
     //------------------------------------------------
-    // FINISH
+    // 7) Brand Sales Performance (lifetime)
     //------------------------------------------------
-    res.json({ success: true, data: finalStats });
+    try {
+      const brandAgg = await Order.aggregate([
+        { $match: { [itemField]: { $exists: true, $ne: [] } } },
+        { $unwind: `$${itemField}` },
+        // handles number/string price & qty
+        {
+          $addFields: {
+            _qty: { $toDouble: { $ifNull: [`$${itemField}.quantity`, 0] } },
+            _price: { $toDouble: { $ifNull: [`$${itemField}.price`, 0] } },
+          },
+        },
+        {
+          $lookup: {
+            from: "products",
+            localField: `${itemField}.productId`,
+            foreignField: "_id",
+            as: "product",
+          },
+        },
+        { $unwind: "$product" },
+        {
+          $group: {
+            _id: "$product.brandId",
+            revenue: { $sum: { $multiply: ["$_qty", "$_price"] } },
+            qty: { $sum: "$_qty" },
+          },
+        },
+        { $sort: { revenue: -1 } },
+        { $limit: 5 },
+      ]);
+
+      const brandSales = await Promise.all(
+        brandAgg.map(async (b) => {
+          try {
+            const brand = await Brand.findById(b._id).select("name").lean();
+            return {
+              brand: brand?.name || "Unknown",
+              revenue: b.revenue || 0,
+              qty: b.qty || 0,
+            };
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      finalStats.brandSales = brandSales.filter(Boolean);
+    } catch {}
+
+    //------------------------------------------------
+    // 8) Payment Method Distribution (lifetime)
+    //------------------------------------------------
+    try {
+      const paymentDist = await Order.aggregate([
+        {
+          $group: {
+            _id: "$paymentMethod",
+            count: { $sum: 1 },
+          },
+        },
+      ]);
+      finalStats.paymentMethodBreakdown = paymentDist.map((p) => ({
+        method: p?._id || "Unknown",
+        count: p?.count || 0,
+      }));
+    } catch {}
+
+    //------------------------------------------------
+    // 9) Top Products (lifetime)
+    //------------------------------------------------
+    try {
+      const topProductsAgg = await Order.aggregate([
+        { $match: { [itemField]: { $exists: true, $ne: [] } } },
+        { $unwind: `$${itemField}` },
+        {
+          $addFields: {
+            _qty: { $toDouble: { $ifNull: [`$${itemField}.quantity`, 0] } },
+            _price: { $toDouble: { $ifNull: [`$${itemField}.price`, 0] } },
+          },
+        },
+        {
+          $lookup: {
+            from: "products",
+            localField: `${itemField}.productId`,
+            foreignField: "_id",
+            as: "product",
+          },
+        },
+        { $unwind: "$product" },
+        {
+          $group: {
+            _id: "$product._id",
+            title: { $first: "$product.title" },
+            image: { $first: { $arrayElemAt: ["$product.images", 0] } },
+            totalQty: { $sum: "$_qty" },
+            revenue: { $sum: { $multiply: ["$_qty", "$_price"] } },
+          },
+        },
+        { $sort: { revenue: -1 } },
+        { $limit: 5 },
+      ]);
+      finalStats.topProducts = topProductsAgg;
+    } catch {}
+
+    //------------------------------------------------
+    // 10) Top Categories by Revenue (lifetime)
+    //------------------------------------------------
+    try {
+      const catAgg = await Order.aggregate([
+        { $match: { [itemField]: { $exists: true, $ne: [] } } },
+        { $unwind: `$${itemField}` },
+        {
+          $addFields: {
+            _qty: { $toDouble: { $ifNull: [`$${itemField}.quantity`, 0] } },
+            _price: { $toDouble: { $ifNull: [`$${itemField}.price`, 0] } },
+          },
+        },
+        {
+          $lookup: {
+            from: "products",
+            localField: `${itemField}.productId`,
+            foreignField: "_id",
+            as: "product",
+          },
+        },
+        { $unwind: "$product" },
+        {
+          $lookup: {
+            from: "categories",
+            localField: "product.categoryId",
+            foreignField: "_id",
+            as: "category",
+          },
+        },
+        { $unwind: "$category" },
+        {
+          $group: {
+            _id: "$category.name",
+            revenue: { $sum: { $multiply: ["$_qty", "$_price"] } },
+          },
+        },
+        { $sort: { revenue: -1 } },
+        { $limit: 5 },
+      ]);
+      finalStats.categorySales = catAgg.map((c) => ({
+        name: c?._id || "Unknown",
+        value: c?.revenue || 0,
+      }));
+    } catch {}
+
+    //------------------------------------------------
+    // DONE
+    //------------------------------------------------
+    return res.json({ success: true, data: finalStats });
   } catch (error) {
     console.error("getOrderStats ERROR:", error);
-    res
+    return res
       .status(500)
       .json({ success: false, message: "Failed to fetch order stats" });
   }
 };
 
 //------------------------------------------------
-// GET /admin/orders/sales-overview
+// GET /admin/orders/sales-overview  (30-day line chart)
 //------------------------------------------------
 export const getSalesOverview = async (req, res) => {
   try {
@@ -253,10 +374,10 @@ export const getSalesOverview = async (req, res) => {
       orders: d.orders,
     }));
 
-    res.json({ success: true, data: formatted });
+    return res.json({ success: true, data: formatted });
   } catch (error) {
     console.error("getSalesOverview ERROR:", error);
-    res
+    return res
       .status(500)
       .json({ success: false, message: "Failed to fetch sales overview" });
   }
