@@ -1,318 +1,106 @@
 // src/controllers/admin/order-stats-controller.js
-
 import Order from "../../models/Order.js";
 import Product from "../../models/Product.js";
 import Category from "../../models/Category.js";
-import mongoose from "mongoose";
 
-// Get Order Statistics
 export const getOrderStats = async (req, res) => {
   try {
-    console.log("=== Starting getOrderStats ===");
-    
-    const finalStats = {
+    const stats = {
       totalOrders: 0,
       totalRevenue: 0,
       pendingOrders: 0,
       deliveredOrders: 0,
       totalCustomers: 0,
-      revenueGrowthPercentage: 0,
       topProducts: [],
-      ordersChange: { value: 0, percentage: 0 },
-      pendingChange: { value: 0, percentage: 0 },
-      deliveredChange: { value: 0, percentage: 0 },
-      customersChange: { value: 0, percentage: 0 },
+      categorySales: [],
       lowStock: [],
       confirmedOrders: 0,
       shippedOrders: 0,
-      categorySales: [],
     };
 
-    // Get basic counts
-    const totalOrders = await Order.countDocuments();
-    const pendingOrders = await Order.countDocuments({ orderStatus: /pending/i });
-    const deliveredOrders = await Order.countDocuments({ orderStatus: /delivered/i });
-    const confirmedOrders = await Order.countDocuments({ orderStatus: /confirmed/i });
-    const shippedOrders = await Order.countDocuments({ orderStatus: /shipped/i });
+    // 1. Fetch all orders
+    const orders = await Order.find({}).lean();
 
-    // Get unique customers
-    const customers = await Order.distinct("userId");
-    const totalCustomers = customers.length;
+    // 2. Basic Counts
+    stats.totalOrders = orders.length;
+    stats.totalRevenue = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+    stats.pendingOrders = orders.filter(o => /pending|processing/i.test(o.orderStatus)).length;
+    stats.deliveredOrders = orders.filter(o => /delivered|completed/i.test(o.orderStatus)).length;
+    stats.confirmedOrders = orders.filter(o => /confirmed/i.test(o.orderStatus)).length;
+    stats.shippedOrders = orders.filter(o => /shipped/i.test(o.orderStatus)).length;
+    stats.totalCustomers = new Set(orders.map(o => o.userId?.toString())).size;
 
-    // Get low stock products
-    const lowStock = await Product.find({ totalStock: { $lt: 10 } })
+    // 3. Low Stock
+    stats.lowStock = await Product.find({ totalStock: { $lt: 10 } })
       .select("title totalStock")
       .limit(5)
       .lean();
 
-    // Get total revenue from delivered orders
-    const revenueData = await Order.aggregate([
-      { $match: { orderStatus: { $in: [/delivered/i, /confirmed/i] } } },
-      { $group: { _id: null, total: { $sum: "$totalAmount" } } }
+    // 4. Top 5 Products
+    const topProducts = await Order.aggregate([
+      { $match: { "cartItems.0": { $exists: true } } },
+      { $unwind: "$cartItems" },
+      { $addFields: { "cartItems.productId": { $toObjectId: "$cartItems.productId" } } },
+      {
+        $lookup: {
+          from: "products",
+          localField: "cartItems.productId",
+          foreignField: "_id",
+          as: "product"
+        }
+      },
+      { $unwind: { path: "$product", preserveNullAndEmptyArrays: true } },
+      {
+        $group: {
+          _id: "$cartItems.productId",
+          title: { $first: { $ifNull: ["$product.title", "$cartItems.title"] } },
+          totalQty: { $sum: "$cartItems.quantity" },
+          revenue: { $sum: { $multiply: ["$cartItems.quantity", "$cartItems.price"] } }
+        }
+      },
+      { $sort: { revenue: -1 } },
+      { $limit: 5 }
     ]);
+    stats.topProducts = topProducts;
 
-    // Update stats
-    finalStats.totalOrders = totalOrders;
-    finalStats.pendingOrders = pendingOrders;
-    finalStats.deliveredOrders = deliveredOrders;
-    finalStats.confirmedOrders = confirmedOrders;
-    finalStats.shippedOrders = shippedOrders;
-    finalStats.totalCustomers = totalCustomers;
-    finalStats.lowStock = lowStock;
-    finalStats.totalRevenue = revenueData[0]?.total || 0;
-
-    // Approach 1: Get Top 5 Products by Revenue using a more direct approach
-    try {
-      console.log("=== Getting Top Products ===");
-      
-      // Get all orders with cartItems
-      const allOrders = await Order.find({ 
-        cartItems: { $exists: true, $ne: [] }
-      }).select('cartItems').lean();
-      
-      console.log("Found orders with cartItems:", allOrders.length);
-      
-      if (allOrders.length > 0) {
-        // Create a map to store product sales data
-        const productSalesMap = new Map();
-        
-        // Process each order's cartItems
-        allOrders.forEach(order => {
-          if (order.cartItems && Array.isArray(order.cartItems)) {
-            order.cartItems.forEach(item => {
-              const productId = item.productId ? item.productId.toString() : null;
-              
-              if (productId) {
-                const existingData = productSalesMap.get(productId) || {
-                  productId,
-                  totalQty: 0,
-                  totalRevenue: 0
-                };
-                
-                // Convert to numbers to handle both string and number values
-                const quantity = parseFloat(item.quantity) || 0;
-                const price = parseFloat(item.price) || 0;
-                
-                existingData.totalQty += quantity;
-                existingData.totalRevenue += quantity * price;
-                
-                productSalesMap.set(productId, existingData);
-              }
-            });
-          }
-        });
-        
-        console.log("Product sales map size:", productSalesMap.size);
-        
-        // Convert map to array and sort by revenue
-        const sortedProducts = Array.from(productSalesMap.values())
-          .sort((a, b) => b.totalRevenue - a.totalRevenue)
-          .slice(0, 5);
-        
-        // Get product details for the top products
-        if (sortedProducts.length > 0) {
-          const productIds = sortedProducts.map(p => mongoose.Types.ObjectId(p.productId));
-          const products = await Product.find({ _id: { $in: productIds } })
-            .select('_id title')
-            .lean();
-          
-          // Create a product lookup map
-          const productMap = new Map();
-          products.forEach(p => {
-            productMap.set(p._id.toString(), p.title);
-          });
-          
-          // Format the final top products data
-          finalStats.topProducts = sortedProducts.map(p => ({
-            _id: p.productId,
-            title: productMap.get(p.productId) || 'Unknown Product',
-            totalQty: p.totalQty,
-            revenue: p.totalRevenue
-          }));
-          
-          console.log("Top products:", finalStats.topProducts);
+    // 5. Sales by Category
+    const categorySales = await Order.aggregate([
+      { $match: { "cartItems.0": { $exists: true } } },
+      { $unwind: "$cartItems" },
+      { $addFields: { "cartItems.productId": { $toObjectId: "$cartItems.productId" } } },
+      {
+        $lookup: {
+          from: "products",
+          localField: "cartItems.productId",
+          foreignField: "_id",
+          as: "product"
         }
-      }
-      
-      // If still no products found, try a different approach
-      if (finalStats.topProducts.length === 0) {
-        console.log("Trying alternative approach for top products");
-        
-        // Try to get any products and use them as fallback with random values
-        const anyProducts = await Product.find({}).select('_id title').limit(5);
-        
-        if (anyProducts.length > 0) {
-          finalStats.topProducts = anyProducts.map((product, index) => ({
-            _id: product._id,
-            title: product.title,
-            totalQty: Math.floor(Math.random() * 20) + 5,
-            revenue: Math.floor(Math.random() * 2000) + 500
-          }));
-          
-          console.log("Used real products with random values:", finalStats.topProducts);
+      },
+      { $unwind: { path: "$product", preserveNullAndEmptyArrays: true } },
+      { $addFields: { "product.categoryId": { $toObjectId: "$product.categoryId" } } },
+      {
+        $lookup: {
+          from: "categories",
+          localField: "product.categoryId",
+          foreignField: "_id",
+          as: "category"
         }
-      }
-      
-      // Final fallback if still no products
-      if (finalStats.topProducts.length === 0) {
-        console.log("Using hardcoded fallback for top products");
-        finalStats.topProducts = [
-          { _id: "1", title: "Product A", totalQty: 15, revenue: 1500 },
-          { _id: "2", title: "Product B", totalQty: 8, revenue: 1200 },
-          { _id: "3", title: "Product C", totalQty: 12, revenue: 1800 },
-          { _id: "4", title: "Product D", totalQty: 6, revenue: 900 },
-          { _id: "5", title: "Product E", totalQty: 10, revenue: 1000 }
-        ];
-      }
-    } catch (e) {
-      console.error("Top products error:", e);
-      finalStats.topProducts = [
-        { _id: "1", title: "Product A", totalQty: 15, revenue: 1500 },
-        { _id: "2", title: "Product B", totalQty: 8, revenue: 1200 },
-        { _id: "3", title: "Product C", totalQty: 12, revenue: 1800 },
-        { _id: "4", title: "Product D", totalQty: 6, revenue: 900 },
-        { _id: "5", title: "Product E", totalQty: 10, revenue: 1000 }
-      ];
-    }
-
-    // Approach 2: Get Sales by Category using a more direct approach
-    try {
-      console.log("=== Getting Category Sales ===");
-      
-      // First, let's get all categories
-      const allCategories = await Category.find({}).select('_id name').lean();
-      console.log("Found categories:", allCategories.length);
-      
-      if (allCategories.length > 0) {
-        // Create a map to store category sales data
-        const categorySalesMap = new Map();
-        
-        // Initialize all categories with 0 revenue
-        allCategories.forEach(category => {
-          categorySalesMap.set(category._id.toString(), {
-            categoryId: category._id.toString(),
-            name: category.name,
-            totalRevenue: 0
-          });
-        });
-        
-        // Get all orders with cartItems
-        const ordersWithItems = await Order.find({ 
-          cartItems: { $exists: true, $ne: [] }
-        }).select('cartItems').limit(100); // Limit to avoid memory issues
-        
-        // Collect all unique product IDs from orders
-        const allProductIds = new Set();
-        ordersWithItems.forEach(order => {
-          if (order.cartItems && Array.isArray(order.cartItems)) {
-            order.cartItems.forEach(item => {
-              if (item.productId) {
-                allProductIds.add(item.productId.toString());
-              }
-            });
-          }
-        });
-        
-        console.log("Unique product IDs:", allProductIds.size);
-        
-        // Get all products with their categories
-        const products = await Product.find({ 
-          _id: { $in: Array.from(allProductIds) }
-        }).select('_id categoryId').lean();
-        
-        // Create a product to category mapping
-        const productCategoryMap = new Map();
-        products.forEach(p => {
-          if (p.categoryId) {
-            productCategoryMap.set(p._id.toString(), p.categoryId.toString());
-          }
-        });
-        
-        console.log("Product-category mappings:", productCategoryMap.size);
-        
-        // Process each order's cartItems to calculate category sales
-        ordersWithItems.forEach(order => {
-          if (order.cartItems && Array.isArray(order.cartItems)) {
-            order.cartItems.forEach(item => {
-              const productId = item.productId.toString();
-              const categoryId = productCategoryMap.get(productId);
-              
-              if (categoryId) {
-                const categoryData = categorySalesMap.get(categoryId);
-                if (categoryData) {
-                  // Convert to numbers to handle both string and number values
-                  const quantity = parseFloat(item.quantity) || 0;
-                  const price = parseFloat(item.price) || 0;
-                  
-                  categoryData.totalRevenue += quantity * price;
-                  categorySalesMap.set(categoryId, categoryData);
-                }
-              }
-            });
-          }
-        });
-        
-        // Convert map to array and sort by revenue
-        const sortedCategories = Array.from(categorySalesMap.values())
-          .sort((a, b) => b.totalRevenue - a.totalRevenue)
-          .slice(0, 5);
-        
-        // Format the final category sales data
-        finalStats.categorySales = sortedCategories.map(c => ({
-          name: c.name,
-          value: c.totalRevenue
-        }));
-        
-        console.log("Category sales:", finalStats.categorySales);
-      }
-      
-      // If still no categories found, try a different approach
-      if (finalStats.categorySales.length === 0) {
-        console.log("Trying alternative approach for category sales");
-        
-        // Try to get any categories and use them as fallback with random values
-        const anyCategories = await Category.find({}).select('_id name').limit(5);
-        
-        if (anyCategories.length > 0) {
-          finalStats.categorySales = anyCategories.map((category, index) => ({
-            name: category.name,
-            value: Math.floor(Math.random() * 10000) + 1000
-          }));
-          
-          console.log("Used real categories with random values:", finalStats.categorySales);
+      },
+      { $unwind: { path: "$category", preserveNullAndEmptyArrays: true } },
+      {
+        $group: {
+          _id: { $ifNull: ["$category.name", "Uncategorized"] },
+          value: { $sum: { $multiply: ["$cartItems.quantity", "$cartItems.price"] } }
         }
-      }
-      
-      // Final fallback if still no categories
-      if (finalStats.categorySales.length === 0) {
-        console.log("Using hardcoded fallback for category sales");
-        finalStats.categorySales = [
-          { name: "Electronics", value: 8000 },
-          { name: "Clothing", value: 6000 },
-          { name: "Books", value: 4000 },
-          { name: "Home", value: 3000 },
-          { name: "Others", value: 2000 }
-        ];
-      }
-    } catch (e) {
-      console.error("Category sales error:", e);
-      finalStats.categorySales = [
-        { name: "Electronics", value: 8000 },
-        { name: "Clothing", value: 6000 },
-        { name: "Books", value: 4000 },
-        { name: "Home", value: 3000 },
-        { name: "Others", value: 2000 }
-      ];
-    }
+      },
+      { $sort: { value: -1 } }
+    ]);
+    stats.categorySales = categorySales.filter(c => c.value > 0);
 
-    console.log("=== Final Stats ===");
-    console.log("Top Products:", finalStats.topProducts);
-    console.log("Category Sales:", finalStats.categorySales);
-
-    res.json({ success: true, data: finalStats });
+    res.json({ success: true, data: stats });
   } catch (error) {
     console.error("getOrderStats ERROR:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch order stats" });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
