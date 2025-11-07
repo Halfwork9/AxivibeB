@@ -53,92 +53,76 @@ export const getOrderStats = async (req, res) => {
     // =========================
     // ✅ TOP PRODUCTS — LIFETIME
     // =========================
-    const topProductsAgg = await Order.aggregate([
-      { $match: { cartItems: { $exists: true, $ne: [] } } },
-      { $unwind: "$cartItems" },
-
-      {
-        $lookup: {
-          from: "products",
-          localField: "cartItems.productId",
-          foreignField: "_id",
-          as: "product",
+   const topProductsAgg = await Order.aggregate([
+  { $match: { cartItems: { $exists: true, $ne: [] } } },
+  { $unwind: "$cartItems" },
+  {
+    $lookup: {
+      from: "products",
+      localField: "cartItems.productId",
+      foreignField: "_id",
+      as: "product",
+    },
+  },
+  { $unwind: "$product" },
+  {
+    $group: {
+      _id: "$cartItems.productId",
+      title: { $first: "$product.title" },
+      image: { $first: { $arrayElemAt: ["$product.images", 0] } },
+      totalQty: { $sum: "$cartItems.quantity" },
+      revenue: {
+        $sum: {
+          $multiply: ["$cartItems.quantity", "$cartItems.price"],
         },
       },
-      { $unwind: "$product" },
-
-      {
-        $group: {
-          _id: "$cartItems.productId",
-          title: { $first: "$product.title" },
-          image: { $first: { $arrayElemAt: ["$product.images", 0] } },
-          totalQty: { $sum: "$cartItems.quantity" },
-          revenue: {
-            $sum: {
-              $multiply: ["$cartItems.quantity", "$cartItems.price"],
-            },
-          },
-        },
-      },
-
-      { $sort: { revenue: -1 } },
-      { $limit: 5 },
-    ]);
-
-    finalStats.topProducts = topProductsAgg;
+    },
+  },
+  { $sort: { revenue: -1 } },
+  { $limit: 5 },
+]);
+finalStats.topProducts = topProductsAgg;
 
 
     // =========================
     // ✅ TOP CATEGORIES — LIFETIME
     // =========================
-    const categorySalesAgg = await Order.aggregate([
-      { $match: { cartItems: { $exists: true, $ne: [] } } },
-      { $unwind: "$cartItems" },
-
-      {
-        $lookup: {
-          from: "products",
-          localField: "cartItems.productId",
-          foreignField: "_id",
-          as: "product",
+  const categoryAgg = await Order.aggregate([
+  { $match: { cartItems: { $exists: true, $ne: [] } } },
+  { $unwind: "$cartItems" },
+  {
+    $lookup: {
+      from: "products",
+      localField: "cartItems.productId",
+      foreignField: "_id",
+      as: "product",
+    },
+  },
+  { $unwind: "$product" },
+  {
+    $lookup: {
+      from: "categories",
+      localField: "product.categoryId",
+      foreignField: "_id",
+      as: "category",
+    },
+  },
+  { $unwind: "$category" },
+  {
+    $group: {
+      _id: "$category.name",
+      revenue: {
+        $sum: {
+          $multiply: ["$cartItems.quantity", "$cartItems.price"],
         },
       },
-      { $unwind: "$product" },
+    },
+  },
+  { $sort: { revenue: -1 } },
+  { $limit: 5 },
+]);
+finalStats.categorySales = categoryAgg;
 
-      {
-        $group: {
-          _id: "$product.categoryId",
-          revenue: {
-            $sum: {
-              $multiply: ["$cartItems.quantity", "$cartItems.price"],
-            },
-          },
-        },
-      },
-
-      {
-        $lookup: {
-          from: "categories",
-          localField: "_id",
-          foreignField: "_id",
-          as: "category",
-        },
-      },
-      { $unwind: "$category" },
-
-      {
-        $project: {
-          categoryId: "$_id",
-          name: "$category.name",
-          value: "$revenue",
-        },
-      },
-
-      { $sort: { value: -1 } },
-      { $limit: 5 },
-    ]);
-
-    finalStats.categorySales = categorySalesAgg;
 
     console.log("✅ Final Stats Ready");
     res.json({ success: true, data: finalStats });
