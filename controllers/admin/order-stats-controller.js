@@ -57,109 +57,118 @@ export const getOrderStats = async (req, res) => {
 
 
     // ===== TOP PRODUCTS by revenue =====
-    try {
-      const topProducts = await Order.aggregate([
-        { $unwind: "$cartItems" },
+    const topProducts = await Order.aggregate([
+  { $unwind: "$cartItems" },
 
-        {
-          $group: {
-            _id: "$cartItems.productId",
-            totalQty: { $sum: "$cartItems.quantity" },
-            revenue: { $sum: { $multiply: ["$cartItems.quantity", "$cartItems.price"] } }
-          }
-        },
-
-        {
-          $lookup: {
-            from: "products",
-            localField: "_id",
-            foreignField: "_id",
-            as: "product"
-          }
-        },
-        { $unwind: "$product" },
-
-        {
-          $project: {
-            _id: 1,
-            totalQty: 1,
-            revenue: 1,
-            title: "$product.title"
-          }
-        },
-        { $sort: { revenue: -1 } },
-        { $limit: 5 }
-      ]);
-
-      finalStats.topProducts = topProducts;
-      console.log("✅ Top products:", topProducts);
-    } catch (err) {
-      console.error("Top products error:", err);
-      finalStats.topProducts = [];
+  {
+    $group: {
+      _id: "$cartItems.productId",
+      totalQty: {
+        $sum: { $toDouble: "$cartItems.quantity" }
+      },
+      revenue: {
+        $sum: {
+          $multiply: [
+            { $toDouble: "$cartItems.quantity" },
+            { $toDouble: "$cartItems.price" }
+          ]
+        }
+      }
     }
+  },
+
+  {
+    $lookup: {
+      from: "products",
+      localField: "_id",
+      foreignField: "_id",
+      as: "product"
+    }
+  },
+  { $unwind: "$product" },
+
+  {
+    $project: {
+      _id: 1,
+      totalQty: 1,
+      revenue: 1,
+      title: "$product.title"
+    }
+  },
+  { $sort: { revenue: -1 } },
+  { $limit: 5 }
+]);
+
+finalStats.topProducts = topProducts;
+
 
 
     // ===== CATEGORY SALES (top 5) =====
-    try {
-      const categorySales = await Order.aggregate([
-        { $unwind: "$cartItems" },
+   const categorySales = await Order.aggregate([
+  { $unwind: "$cartItems" },
 
-        // revenue grouped per product
-        {
-          $group: {
-            _id: "$cartItems.productId",
-            revenue: { $sum: { $multiply: ["$cartItems.quantity", "$cartItems.price"] } }
-          }
-        },
-
-        // join product
-        {
-          $lookup: {
-            from: "products",
-            localField: "_id",
-            foreignField: "_id",
-            as: "product"
-          }
-        },
-        { $unwind: "$product" },
-
-        // group by category
-        {
-          $group: {
-            _id: "$product.categoryId",
-            revenue: { $sum: "$revenue" }
-          }
-        },
-
-        // join category
-        {
-          $lookup: {
-            from: "categories",
-            localField: "_id",
-            foreignField: "_id",
-            as: "category"
-          }
-        },
-        { $unwind: "$category" },
-
-        {
-          $project: {
-            name: "$category.name",
-            value: "$revenue"
-          }
-        },
-
-        { $sort: { value: -1 } },
-        { $limit: 5 }
-      ]);
-
-      finalStats.categorySales = categorySales;
-      console.log("✅ Category sales:", categorySales);
-    } catch (err) {
-      console.log("Category sales error", err);
-      finalStats.categorySales = [];
+  {
+    $group: {
+      _id: "$cartItems.productId",
+      revenue: {
+        $sum: {
+          $multiply: [
+            { $toDouble: "$cartItems.quantity" },
+            { $toDouble: "$cartItems.price" }
+          ]
+        }
+      }
     }
+  },
 
+  {
+    $lookup: {
+      from: "products",
+      localField: "_id",
+      foreignField: "_id",
+      as: "product"
+    }
+  },
+  { $unwind: "$product" },
+
+  {
+    $group: {
+      _id: "$product.categoryId",
+      revenue: { $sum: "$revenue" }
+    }
+  },
+
+  {
+    $lookup: {
+      from: "categories",
+      localField: "_id",
+      foreignField: "_id",
+      as: "category"
+    }
+  },
+  { $unwind: "$category" },
+
+  {
+    $project: {
+      name: "$category.name",
+      value: "$revenue"
+    }
+  },
+
+  { $sort: { value: -1 } },
+  { $limit: 5 }
+]);
+
+finalStats.categorySales = categorySales;
+
+const check = await Order.find({ cartItems: { $exists: true, $ne: [] } })
+  .select("cartItems")
+  .limit(3)
+  .lean();
+
+console.log(check);
+console.log("topProducts raw:", topProducts);
+console.log("categorySales raw:", categorySales);
 
     console.log("✅ FINAL STATS SENT");
     res.json({ success: true, data: finalStats });
