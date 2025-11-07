@@ -13,6 +13,8 @@ export const createOrder = async (req, res) => {
     const {
       userId,
       cartId,
+      userName: user.userName,
+  userEmail: user.email,
       cartItems,
       addressInfo,
       totalAmount,
@@ -25,6 +27,8 @@ export const createOrder = async (req, res) => {
       const newOrder = new Order({
         userId,
         cartId,
+        userName: user.userName,
+  userEmail: user.email,
         cartItems,
         addressInfo,
         totalAmount,
@@ -74,6 +78,8 @@ export const createOrder = async (req, res) => {
         userId,
         cartId,
         cartItems,
+        userName: user.userName,
+  userEmail: user.email,
         addressInfo,
         orderStatus: "pending",
         paymentMethod: "stripe",
