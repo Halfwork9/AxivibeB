@@ -36,7 +36,6 @@ const MONGO_URI = process.env.MONGO_URI;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// --- CORS Configuration ---
 const allowedOrigins = [
   "https://nikhilmamdekar.site",
   "https://www.nikhilmamdekar.site",
@@ -44,27 +43,20 @@ const allowedOrigins = [
   "https://axivibe-vojm.vercel.app",
 ];
 
-// Configure CORS with more permissive settings
-app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      return callback(null, true);
-    } else {
-      console.log("CORS policy blocked origin:", origin);
-      return callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-  optionsSuccessStatus: 200,
-}));
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+  }
+  res.header("Access-Control-Allow-Credentials", "true");
+  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+  next();
+});
 
-// Handle pre-flight requests for all routes
-app.options('*', cors());
+app.options("*", (req, res) => {
+  res.sendStatus(200);
+});
 
 // --- Serve uploads folder with proper CORS headers ---
 app.use(
