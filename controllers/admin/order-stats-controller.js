@@ -2,19 +2,8 @@ import Order from "../../models/Order.js";
 import Product from "../../models/Product.js";
 import Category from "../../models/Category.js";
 
-// Helper function to calculate stats
-const getStatsWithChange = async (model, filter = {}, prevFilter = {}) => {
-  const current = await model.countDocuments(filter);
-  const previous = await model.countDocuments(prevFilter);
-  const change = current - previous;
-  const percentage = previous > 0 ? (change / previous) * 100 : (current > 0 ? 100 : 0);
-  return { value: current, change: { value: change, percentage: percentage.toFixed(0) } };
-};
-
 export const getOrderStats = async (req, res) => {
   try {
-    console.log("=== Starting getOrderStats ===");
-
     // --- Basic Stats ---
     const totalOrders = await Order.countDocuments();
     const pendingOrders = await Order.countDocuments({ orderStatus: /pending/i });
@@ -35,8 +24,7 @@ export const getOrderStats = async (req, res) => {
     ]);
     const totalRevenue = revenueData[0]?.total || 0;
 
-    // ✅ --- NEW: Efficient Top 5 Products ---
-    // This single query calculates revenue for all products from completed orders.
+    // ✅ NEW: Efficient Top 5 Products
     const topProducts = await Order.aggregate([
       { $match: { orderStatus: { $in: [/delivered/i, /confirmed/i] } } },
       { $project: {
@@ -50,23 +38,12 @@ export const getOrderStats = async (req, res) => {
       }},
       { $sort: { revenue: -1 } },
       { $limit: 5 },
-      { $lookup: {
-          from: "products",
-          localField: "_id",
-          foreignField: "_id",
-          as: "productDetails"
-      }},
+      { $lookup: { from: "products", localField: "_id", foreignField: "_id", as: "productDetails" }},
       { $unwind: "$productDetails" },
-      { $project: {
-          _id: 1,
-          title: "$productDetails.title",
-          totalQty: 1,
-          revenue: 1
-      }}
+      { $project: { _id: 1, title: "$productDetails.title", totalQty: 1, revenue: 1 }}
     ]);
 
-    // ✅ --- NEW: Efficient Top 5 Categories ---
-    // This single query calculates revenue for all categories from completed orders.
+    // ✅ NEW: Efficient Top 5 Categories
     const categorySales = await Order.aggregate([
       { $match: { orderStatus: { $in: [/delivered/i, /confirmed/i] } } },
       { $project: {
@@ -77,34 +54,18 @@ export const getOrderStats = async (req, res) => {
           _id: "$orderItems.productId",
           revenue: { $sum: { $multiply: ["$orderItems.quantity", "$orderItems.price"] } }
       }},
-      { $lookup: {
-          from: "products",
-          localField: "_id",
-          foreignField: "_id",
-          as: "productDetails"
-      }},
+      { $lookup: { from: "products", localField: "_id", foreignField: "_id", as: "productDetails" }},
       { $unwind: "$productDetails" },
       { $group: {
           _id: "$productDetails.categoryId",
-          value: { $sum: "$revenue" } // 'value' for the pie chart
+          value: { $sum: "$revenue" }
       }},
-      { $lookup: {
-          from: "categories",
-          localField: "_id",
-          foreignField: "_id",
-          as: "categoryDetails"
-      }},
+      { $lookup: { from: "categories", localField: "_id", foreignField: "_id", as: "categoryDetails" }},
       { $unwind: "$categoryDetails" },
       { $sort: { value: -1 } },
       { $limit: 5 },
-      { $project: {
-          name: "$categoryDetails.name",
-          value: 1
-      }}
+      { $project: { name: "$categoryDetails.name", value: 1 }}
     ]);
-
-    console.log("Final Top Products:", topProducts);
-    console.log("Final Category Sales:", categorySales);
 
     // --- Final Stats Object ---
     const finalStats = {
@@ -116,8 +77,8 @@ export const getOrderStats = async (req, res) => {
       totalCustomers,
       lowStock,
       totalRevenue,
-      topProducts: topProducts.length > 0 ? topProducts : [], // Use query result or empty
-      categorySales: categorySales.length > 0 ? categorySales : [], // Use query result or empty
+      topProducts: topProducts.length > 0 ? topProducts : [],
+      categorySales: categorySales.length > 0 ? categorySales : [],
     };
 
     res.json({ success: true, data: finalStats });
