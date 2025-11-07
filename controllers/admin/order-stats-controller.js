@@ -57,22 +57,30 @@ export const getOrderStats = async (req, res) => {
 
 // ===== TOP PRODUCTS by revenue =====
 const topProducts = await Order.aggregate([
-  { $match: { $or: [{ orderStatus: /delivered/i }, { orderStatus: /confirmed/i }] } },
+  // ✅ Only consider orders that were actually completed
+  {
+    $match: {
+      orderStatus: { $in: ["delivered", "confirmed"] }
+    }
+  },
+
   { $unwind: "$cartItems" },
+
   {
     $group: {
       _id: "$cartItems.productId",
-      totalQty: { $sum: { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } } },
+      totalQty: { $sum: { $toDouble: "$cartItems.quantity" } },
       revenue: {
         $sum: {
           $multiply: [
-            { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } },
-            { $toDouble: { $ifNull: ["$cartItems.price", 0] } }
+            { $toDouble: "$cartItems.quantity" },
+            { $toDouble: "$cartItems.price" }
           ]
         }
       }
     }
   },
+
   {
     $lookup: {
       from: "products",
@@ -82,56 +90,87 @@ const topProducts = await Order.aggregate([
     }
   },
   { $unwind: "$product" },
-  { $project: { _id: 1, title: "$product.title", totalQty: 1, revenue: 1 } },
+
+  {
+    $project: {
+      _id: 1,
+      title: "$product.title",
+      totalQty: 1,
+      revenue: 1,
+    }
+  },
   { $sort: { revenue: -1 } },
   { $limit: 5 }
 ]);
 
-// ✅ PUT IT INTO THE RESPONSE OBJECT
 finalStats.topProducts = topProducts;
+
 
 // ===== CATEGORY SALES (top 5) =====
 const categorySales = await Order.aggregate([
-  { $match: { $or: [{ orderStatus: /delivered/i }, { orderStatus: /confirmed/i }] } },
+  {
+    $match: {
+      orderStatus: { $in: ["delivered", "confirmed"] }
+    }
+  },
+
   { $unwind: "$cartItems" },
+
   {
     $group: {
       _id: "$cartItems.productId",
       revenue: {
         $sum: {
           $multiply: [
-            { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } },
-            { $toDouble: { $ifNull: ["$cartItems.price", 0] } }
+            { $toDouble: "$cartItems.quantity" },
+            { $toDouble: "$cartItems.price" }
           ]
         }
       }
     }
   },
-  { $lookup: { from: "products", localField: "_id", foreignField: "_id", as: "product" } },
+
+  {
+    $lookup: {
+      from: "products",
+      localField: "_id",
+      foreignField: "_id",
+      as: "product"
+    }
+  },
   { $unwind: "$product" },
-  { $group: { _id: "$product.categoryId", revenue: { $sum: "$revenue" } } },
-  { $lookup: { from: "categories", localField: "_id", foreignField: "_id", as: "category" } },
+
+  {
+    $group: {
+      _id: "$product.categoryId",
+      revenue: { $sum: "$revenue" }
+    }
+  },
+
+  {
+    $lookup: {
+      from: "categories",
+      localField: "_id",
+      foreignField: "_id",
+      as: "category"
+    }
+  },
   { $unwind: "$category" },
-  { $project: { name: "$category.name", value: "$revenue" } },
+
+  {
+    $project: {
+      _id: 0,
+      name: "$category.name",
+      value: "$revenue"
+    }
+  },
+
   { $sort: { value: -1 } },
   { $limit: 5 }
 ]);
 
-// ✅ PUT IT INTO THE RESPONSE OBJECT
 finalStats.categorySales = categorySales;
 
-// (then)
-res.json({ success: true, data: finalStats });
-
-
-const check = await Order.find({ cartItems: { $exists: true, $ne: [] } })
-  .select("cartItems")
-  .limit(3)
-  .lean();
-
-console.log(check);
-console.log("topProducts raw:", topProducts);
-console.log("categorySales raw:", categorySales);
 
     console.log("✅ FINAL STATS SENT");
     res.json({ success: true, data: finalStats });
