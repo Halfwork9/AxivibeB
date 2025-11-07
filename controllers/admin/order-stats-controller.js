@@ -170,62 +170,71 @@ try {
 } catch (err) {
   console.log("⚠ topCustomers error →", err.message);
 }
+//------------------------------------------------
+// ✅ 7) BRAND SALES PERFORMANCE — LIFETIME (Top 5)
+//------------------------------------------------
+const rawBrandAgg = await Order.aggregate([
+  {
+    $project: {
+      items: {
+        $cond: [
+          { $gt: [{ $size: "$cartItems" }, 0] },
+          "$cartItems",
+          "$items"
+        ]
+      }
+    }
+  },
+  { $unwind: "$items" },
 
-    //------------------------------------------------
-    // 7) Brand Sales Performance (lifetime)
-    //------------------------------------------------
-// ✅ BRAND SALES (Lifetime Top 5)
-const brandAgg = await Order.aggregate([
-  { $unwind: "$cartItems" },
-
+  // Join product
   {
     $lookup: {
       from: "products",
-      localField: "cartItems.productId",
+      localField: "items.productId",
       foreignField: "_id",
-      as: "product",
-    },
+      as: "product"
+    }
   },
   { $unwind: "$product" },
 
+  // Join brand
+  {
+    $lookup: {
+      from: "brands",
+      localField: "product.brandId",
+      foreignField: "_id",
+      as: "brand"
+    }
+  },
+  { $unwind: "$brand" },
+
+  // Group lifetime totals
   {
     $group: {
-      _id: "$product.brandId",
-      qty: { $sum: "$cartItems.quantity" },
-      orderCount: { $addToSet: "$_id" }, // ✅ collect distinct orders
-      revenue: {
-        $sum: {
-          $multiply: ["$cartItems.quantity", "$cartItems.price"],
-        },
-      },
-    },
+      _id: "$brand._id",
+      brand: { $first: "$brand.name" },
+      qty: { $sum: "$items.quantity" },
+      revenue: { $sum: { $multiply: ["$items.quantity", "$items.price"] } },
+      orderIds: { $addToSet: "$_id" },
+    }
   },
+
   {
     $project: {
+      _id: 1,
+      brand: 1,
       qty: 1,
       revenue: 1,
-      orderCount: { $size: "$orderCount" }, // ✅ size of distinct orders
-    },
+      orderCount: { $size: "$orderIds" },
+    }
   },
-  { $sort: { orderCount: -1 } },   // ✅ Top lifetime brands
+
+  { $sort: { qty: -1 } },     // <── sort by lifetime qty
   { $limit: 5 },
 ]);
 
-// ✅ Hydrate brand names
-const brands = await Promise.all(
-  brandAgg.map(async (b) => {
-    const brand = await Brand.findById(b._id).select("name");
-    return {
-      _id: b._id,
-      brand: brand?.name || "Unknown",
-      qty: b.qty,
-      revenue: b.revenue,
-      orderCount: b.orderCount,
-    };
-  })
-);
-
-finalStats.brandSalesPerformance = brands;
+finalStats.brandSalesPerformance = rawBrandAgg;
 
     //------------------------------------------------
     // 8) Payment Method Distribution (lifetime)
