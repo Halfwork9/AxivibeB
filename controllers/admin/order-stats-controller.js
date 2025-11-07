@@ -2,107 +2,174 @@
 import Order from "../../models/Order.js";
 import Product from "../../models/Product.js";
 import Category from "../../models/Category.js";
+import mongoose from "mongoose";
 
 export const getOrderStats = async (req, res) => {
   try {
-    const stats = {
+    console.log("=== Starting getOrderStats ===");
+
+    const finalStats = {
       totalOrders: 0,
       totalRevenue: 0,
       pendingOrders: 0,
       deliveredOrders: 0,
       totalCustomers: 0,
+      revenueGrowthPercentage: 0,
       topProducts: [],
-      categorySales: [],
+      ordersChange: { value: 0, percentage: 0 },
+      pendingChange: { value: 0, percentage: 0 },
+      deliveredChange: { value: 0, percentage: 0 },
+      customersChange: { value: 0, percentage: 0 },
       lowStock: [],
       confirmedOrders: 0,
       shippedOrders: 0,
+      categorySales: [],
     };
 
-    // 1. Fetch all orders
-    const orders = await Order.find({}).lean();
+    // ===== BASIC METRICS =====
+    const totalOrders = await Order.countDocuments();
+    const pendingOrders = await Order.countDocuments({ orderStatus: /pending/i });
+    const deliveredOrders = await Order.countDocuments({ orderStatus: /delivered/i });
+    const confirmedOrders = await Order.countDocuments({ orderStatus: /confirmed/i });
+    const shippedOrders = await Order.countDocuments({ orderStatus: /shipped/i });
 
-    // 2. Basic Counts
-    stats.totalOrders = orders.length;
-    stats.totalRevenue = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
-    stats.pendingOrders = orders.filter(o => /pending|processing/i.test(o.orderStatus)).length;
-    stats.deliveredOrders = orders.filter(o => /delivered|completed/i.test(o.orderStatus)).length;
-    stats.confirmedOrders = orders.filter(o => /confirmed/i.test(o.orderStatus)).length;
-    stats.shippedOrders = orders.filter(o => /shipped/i.test(o.orderStatus)).length;
-    stats.totalCustomers = new Set(orders.map(o => o.userId?.toString())).size;
+    const customers = await Order.distinct("userId");
+    const totalCustomers = customers.length;
 
-    // 3. Low Stock
-    stats.lowStock = await Product.find({ totalStock: { $lt: 10 } })
+    const lowStock = await Product.find({ totalStock: { $lt: 10 } })
       .select("title totalStock")
       .limit(5)
       .lean();
 
-    // 4. Top 5 Products
-    const topProducts = await Order.aggregate([
-      { $match: { "cartItems.0": { $exists: true } } },
-      { $unwind: "$cartItems" },
-      { $addFields: { "cartItems.productId": { $toObjectId: "$cartItems.productId" } } },
-      {
-        $lookup: {
-          from: "products",
-          localField: "cartItems.productId",
-          foreignField: "_id",
-          as: "product"
-        }
-      },
-      { $unwind: { path: "$product", preserveNullAndEmptyArrays: true } },
-      {
-        $group: {
-          _id: "$cartItems.productId",
-          title: { $first: { $ifNull: ["$product.title", "$cartItems.title"] } },
-          totalQty: { $sum: "$cartItems.quantity" },
-          revenue: { $sum: { $multiply: ["$cartItems.quantity", "$cartItems.price"] } }
-        }
-      },
-      { $sort: { revenue: -1 } },
-      { $limit: 5 }
+    const revenueData = await Order.aggregate([
+      { $match: { orderStatus: { $in: ["delivered", "confirmed"] } } },
+      { $group: { _id: null, total: { $sum: "$totalAmount" } } }
     ]);
-    stats.topProducts = topProducts;
 
-    // 5. Sales by Category
-    const categorySales = await Order.aggregate([
-      { $match: { "cartItems.0": { $exists: true } } },
-      { $unwind: "$cartItems" },
-      { $addFields: { "cartItems.productId": { $toObjectId: "$cartItems.productId" } } },
-      {
-        $lookup: {
-          from: "products",
-          localField: "cartItems.productId",
-          foreignField: "_id",
-          as: "product"
-        }
-      },
-      { $unwind: { path: "$product", preserveNullAndEmptyArrays: true } },
-      { $addFields: { "product.categoryId": { $toObjectId: "$product.categoryId" } } },
-      {
-        $lookup: {
-          from: "categories",
-          localField: "product.categoryId",
-          foreignField: "_id",
-          as: "category"
-        }
-      },
-      { $unwind: { path: "$category", preserveNullAndEmptyArrays: true } },
-      {
-        $group: {
-          _id: { $ifNull: ["$category.name", "Uncategorized"] },
-          value: { $sum: { $multiply: ["$cartItems.quantity", "$cartItems.price"] } }
-        }
-      },
-      { $sort: { value: -1 } }
-    ]);
-    stats.categorySales = categorySales.filter(c => c.value > 0);
+    finalStats.totalOrders = totalOrders;
+    finalStats.pendingOrders = pendingOrders;
+    finalStats.deliveredOrders = deliveredOrders;
+    finalStats.confirmedOrders = confirmedOrders;
+    finalStats.shippedOrders = shippedOrders;
+    finalStats.totalCustomers = totalCustomers;
+    finalStats.lowStock = lowStock;
+    finalStats.totalRevenue = revenueData[0]?.total || 0;
 
-    res.json({ success: true, data: stats });
+
+    // ===== TOP PRODUCTS by revenue =====
+    try {
+      const topProducts = await Order.aggregate([
+        { $unwind: "$cartItems" },
+
+        {
+          $group: {
+            _id: "$cartItems.productId",
+            totalQty: { $sum: "$cartItems.quantity" },
+            revenue: { $sum: { $multiply: ["$cartItems.quantity", "$cartItems.price"] } }
+          }
+        },
+
+        {
+          $lookup: {
+            from: "products",
+            localField: "_id",
+            foreignField: "_id",
+            as: "product"
+          }
+        },
+        { $unwind: "$product" },
+
+        {
+          $project: {
+            _id: 1,
+            totalQty: 1,
+            revenue: 1,
+            title: "$product.title"
+          }
+        },
+        { $sort: { revenue: -1 } },
+        { $limit: 5 }
+      ]);
+
+      finalStats.topProducts = topProducts;
+      console.log("✅ Top products:", topProducts);
+    } catch (err) {
+      console.error("Top products error:", err);
+      finalStats.topProducts = [];
+    }
+
+
+    // ===== CATEGORY SALES (top 5) =====
+    try {
+      const categorySales = await Order.aggregate([
+        { $unwind: "$cartItems" },
+
+        // revenue grouped per product
+        {
+          $group: {
+            _id: "$cartItems.productId",
+            revenue: { $sum: { $multiply: ["$cartItems.quantity", "$cartItems.price"] } }
+          }
+        },
+
+        // join product
+        {
+          $lookup: {
+            from: "products",
+            localField: "_id",
+            foreignField: "_id",
+            as: "product"
+          }
+        },
+        { $unwind: "$product" },
+
+        // group by category
+        {
+          $group: {
+            _id: "$product.categoryId",
+            revenue: { $sum: "$revenue" }
+          }
+        },
+
+        // join category
+        {
+          $lookup: {
+            from: "categories",
+            localField: "_id",
+            foreignField: "_id",
+            as: "category"
+          }
+        },
+        { $unwind: "$category" },
+
+        {
+          $project: {
+            name: "$category.name",
+            value: "$revenue"
+          }
+        },
+
+        { $sort: { value: -1 } },
+        { $limit: 5 }
+      ]);
+
+      finalStats.categorySales = categorySales;
+      console.log("✅ Category sales:", categorySales);
+    } catch (err) {
+      console.log("Category sales error", err);
+      finalStats.categorySales = [];
+    }
+
+
+    console.log("✅ FINAL STATS SENT");
+    res.json({ success: true, data: finalStats });
+
   } catch (error) {
-    console.error("getOrderStats ERROR:", error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error("❌ getOrderStats ERROR:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch order stats" });
   }
 };
+
 
 // Get Sales Overview
 export const getSalesOverview = async (req, res) => {
