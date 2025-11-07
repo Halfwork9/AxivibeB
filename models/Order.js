@@ -8,7 +8,7 @@ const OrderSchema = new mongoose.Schema({
       productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
       title: String,
       image: String,
-      price:{ type: Number, required: true },
+      price: { type: Number, required: true },
       quantity: Number,
     },
   ],
@@ -29,6 +29,10 @@ const OrderSchema = new mongoose.Schema({
   paymentId: String,
   payerId: String,
 });
+
+// ✅ Order indexes (CORRECT PLACE)
+OrderSchema.index({ "cartItems.productId": 1 });
+OrderSchema.index({ orderStatus: 1 });
 
 const Order = mongoose.model("Order", OrderSchema);
 export default Order;
