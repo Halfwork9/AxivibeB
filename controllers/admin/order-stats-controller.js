@@ -175,14 +175,15 @@ try {
     // 7) Brand Sales Performance (lifetime)
     //------------------------------------------------
 
-const brandAgg = await Order.aggregate([
-  { $match: { cartItems: { $exists: true, $ne: [] } } },
-  { $unwind: "$cartItems" },
+// ✅ Top 5 Brands by Order Count (lifetime)
+const topBrandOrdersAgg = await Order.aggregate([
+  { $match: { [itemField]: { $exists: true, $ne: [] } } },
+  { $unwind: `$${itemField}` },
 
   {
     $lookup: {
       from: "products",
-      localField: "cartItems.productId",
+      localField: `${itemField}.productId`,
       foreignField: "_id",
       as: "product",
     },
@@ -203,19 +204,29 @@ const brandAgg = await Order.aggregate([
     $group: {
       _id: "$brand._id",
       brand: { $first: "$brand.name" },
-      qty: { $sum: "$cartItems.quantity" },
+      orderCount: { $addToSet: "$_id" },   // collect unique order IDs
+      qty: { $sum: `$${itemField}.quantity` },
       revenue: {
         $sum: {
-          $multiply: ["$cartItems.quantity", "$cartItems.price"],
+          $multiply: [`$${itemField}.quantity`, `$${itemField}.price`],
         },
       },
     },
   },
-  { $sort: { revenue: -1 } },
+  {
+    $project: {
+      brand: 1,
+      qty: 1,
+      revenue: 1,
+      orderCount: { $size: "$orderCount" },   // convert array to count
+    },
+  },
+  { $sort: { orderCount: -1 } },   // 🔥 sort by number of orders
   { $limit: 5 },
 ]);
 
-finalStats.brandSalesPerformance = brandAgg;
+finalStats.brandSalesPerformance = topBrandOrdersAgg;
+
 
 
     //------------------------------------------------
