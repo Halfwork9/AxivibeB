@@ -174,16 +174,14 @@ try {
     //------------------------------------------------
     // 7) Brand Sales Performance (lifetime)
     //------------------------------------------------
-
-// ✅ Top 5 Brands by Order Count (lifetime)
-const topBrandOrdersAgg = await Order.aggregate([
-  { $match: { [itemField]: { $exists: true, $ne: [] } } },
-  { $unwind: `$${itemField}` },
+// ✅ BRAND SALES (Lifetime Top 5)
+const brandAgg = await Order.aggregate([
+  { $unwind: "$cartItems" },
 
   {
     $lookup: {
       from: "products",
-      localField: `${itemField}.productId`,
+      localField: "cartItems.productId",
       foreignField: "_id",
       as: "product",
     },
@@ -191,43 +189,43 @@ const topBrandOrdersAgg = await Order.aggregate([
   { $unwind: "$product" },
 
   {
-    $lookup: {
-      from: "brands",
-      localField: "product.brandId",
-      foreignField: "_id",
-      as: "brand",
-    },
-  },
-  { $unwind: "$brand" },
-
-  {
     $group: {
-      _id: "$brand._id",
-      brand: { $first: "$brand.name" },
-      orderCount: { $addToSet: "$_id" },   // collect unique order IDs
-      qty: { $sum: `$${itemField}.quantity` },
+      _id: "$product.brandId",
+      qty: { $sum: "$cartItems.quantity" },
+      orderCount: { $addToSet: "$_id" }, // ✅ collect distinct orders
       revenue: {
         $sum: {
-          $multiply: [`$${itemField}.quantity`, `$${itemField}.price`],
+          $multiply: ["$cartItems.quantity", "$cartItems.price"],
         },
       },
     },
   },
   {
     $project: {
-      brand: 1,
       qty: 1,
       revenue: 1,
-      orderCount: { $size: "$orderCount" },   // convert array to count
+      orderCount: { $size: "$orderCount" }, // ✅ size of distinct orders
     },
   },
-  { $sort: { orderCount: -1 } },   // 🔥 sort by number of orders
+  { $sort: { orderCount: -1 } },   // ✅ Top lifetime brands
   { $limit: 5 },
 ]);
 
-finalStats.brandSalesPerformance = topBrandOrdersAgg;
+// ✅ Hydrate brand names
+const brands = await Promise.all(
+  brandAgg.map(async (b) => {
+    const brand = await Brand.findById(b._id).select("name");
+    return {
+      _id: b._id,
+      brand: brand?.name || "Unknown",
+      qty: b.qty,
+      revenue: b.revenue,
+      orderCount: b.orderCount,
+    };
+  })
+);
 
-
+finalStats.brandSalesPerformance = brands;
 
     //------------------------------------------------
     // 8) Payment Method Distribution (lifetime)
