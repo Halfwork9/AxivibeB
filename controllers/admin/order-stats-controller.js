@@ -61,30 +61,7 @@ export const getOrderStats = async (req, res) => {
     finalStats.lowStock = lowStock;
     finalStats.totalRevenue = revenueData[0]?.total || 0;
 
-    // Debug: Check what order statuses we actually have
-    const orderStatuses = await Order.distinct("orderStatus");
-    console.log("Available order statuses:", orderStatuses);
-
-    // Debug: Check if we have any orders with cartItems
-    const ordersWithItems = await Order.find({ 
-      cartItems: { $exists: true, $ne: [] }
-    }).limit(3);
-    console.log("Sample orders with cartItems:", ordersWithItems.length);
-    if (ordersWithItems.length > 0) {
-      console.log("Sample cartItems structure:", ordersWithItems[0].cartItems);
-      // Check data types
-      if (ordersWithItems[0].cartItems.length > 0) {
-        const item = ordersWithItems[0].cartItems[0];
-        console.log("Item data types:", {
-          price: typeof item.price,
-          quantity: typeof item.quantity,
-          priceValue: item.price,
-          quantityValue: item.quantity
-        });
-      }
-    }
-
-    // Approach 1: Get Top 5 Products by Revenue using a different approach
+    // Approach 1: Get Top 5 Products by Revenue using a more direct approach
     try {
       console.log("=== Getting Top Products ===");
       
@@ -112,7 +89,7 @@ export const getOrderStats = async (req, res) => {
                   totalRevenue: 0
                 };
                 
-                // Convert to numbers to handle string values
+                // Convert to numbers to handle both string and number values
                 const quantity = parseFloat(item.quantity) || 0;
                 const price = parseFloat(item.price) || 0;
                 
@@ -263,7 +240,7 @@ export const getOrderStats = async (req, res) => {
               if (categoryId) {
                 const categoryData = categorySalesMap.get(categoryId);
                 if (categoryData) {
-                  // Convert to numbers to handle string values
+                  // Convert to numbers to handle both string and number values
                   const quantity = parseFloat(item.quantity) || 0;
                   const price = parseFloat(item.price) || 0;
                   
@@ -422,6 +399,9 @@ export const debugDataStructure = async (req, res) => {
       };
     }
     
+    // Check if the Nikon product exists and has a categoryId
+    const nikonProduct = await Product.findById("68b568edb142b6c4967cb6fb");
+    
     res.json({ 
       success: true, 
       data: {
@@ -433,7 +413,8 @@ export const debugDataStructure = async (req, res) => {
         productsWithCategory,
         orderStatuses,
         ordersWithItems,
-        cartItemDataTypes
+        cartItemDataTypes,
+        nikonProduct
       }
     });
   } catch (error) {
