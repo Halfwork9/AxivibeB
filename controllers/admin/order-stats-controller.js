@@ -171,23 +171,22 @@ try {
   console.log("⚠ topCustomers error →", err.message);
 }
 //------------------------------------------------
-// ✅ 7) BRAND SALES PERFORMANCE — LIFETIME (Top 5)
+// ✅ LIFETIME BRAND SALES — COUNT ALL ORDERS
 //------------------------------------------------
 const rawBrandAgg = await Order.aggregate([
   {
     $project: {
       items: {
-        $cond: [
-          { $gt: [{ $size: "$cartItems" }, 0] },
-          "$cartItems",
-          "$items"
+        $concatArrays: [
+          { $ifNull: ["$cartItems", []] },
+          { $ifNull: ["$items", []] }
         ]
       }
     }
   },
+
   { $unwind: "$items" },
 
-  // Join product
   {
     $lookup: {
       from: "products",
@@ -198,7 +197,6 @@ const rawBrandAgg = await Order.aggregate([
   },
   { $unwind: "$product" },
 
-  // Join brand
   {
     $lookup: {
       from: "brands",
@@ -209,14 +207,19 @@ const rawBrandAgg = await Order.aggregate([
   },
   { $unwind: "$brand" },
 
-  // Group lifetime totals
   {
     $group: {
       _id: "$brand._id",
       brand: { $first: "$brand.name" },
+
+      // ✅ FIX: SUM ALL TIME
       qty: { $sum: "$items.quantity" },
-      revenue: { $sum: { $multiply: ["$items.quantity", "$items.price"] } },
-      orderIds: { $addToSet: "$_id" },
+
+      revenue: {
+        $sum: { $multiply: ["$items.quantity", "$items.price"] }
+      },
+
+      orderIds: { $addToSet: "$_id" }
     }
   },
 
@@ -226,12 +229,12 @@ const rawBrandAgg = await Order.aggregate([
       brand: 1,
       qty: 1,
       revenue: 1,
-      orderCount: { $size: "$orderIds" },
+      orderCount: { $size: "$orderIds" }
     }
   },
 
-  { $sort: { qty: -1 } },     // <── sort by lifetime qty
-  { $limit: 5 },
+  { $sort: { qty: -1 } },   // ✅ SORT BY QTY — lifetime
+  { $limit: 5 }
 ]);
 
 finalStats.brandSalesPerformance = rawBrandAgg;
