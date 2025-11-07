@@ -3,6 +3,7 @@
 import Order from "../../models/Order.js";
 import Product from "../../models/Product.js";
 import Category from "../../models/Category.js";
+import mongoose from "mongoose";
 
 // Get Order Statistics
 export const getOrderStats = async (req, res) => {
@@ -46,7 +47,7 @@ export const getOrderStats = async (req, res) => {
 
     // Get total revenue from delivered orders
     const revenueData = await Order.aggregate([
-      { $match: { orderStatus: /delivered|confirmed/i } },
+      { $match: { orderStatus: { $in: [/delivered/i, /confirmed/i] } } },
       { $group: { _id: null, total: { $sum: "$totalAmount" } } }
     ]);
 
@@ -60,66 +61,56 @@ export const getOrderStats = async (req, res) => {
     finalStats.lowStock = lowStock;
     finalStats.totalRevenue = revenueData[0]?.total || 0;
 
-    // Alternative Approach 1: Get Top 5 Products by Revenue
+    // Approach 1: Get Top 5 Products by Revenue using Aggregation
     try {
-      console.log("=== Getting Top Products (Alternative Approach) ===");
+      console.log("=== Getting Top Products using Aggregation ===");
       
-      // Get all orders with delivered or confirmed status
-      const completedOrders = await Order.find({
-        orderStatus: { $in: [/delivered/i, /confirmed/i] }
-      }).select('cartItems').lean();
-      
-      // Create a map to store product sales data
-      const productSalesMap = new Map();
-      
-      // Process each order's cartItems
-      completedOrders.forEach(order => {
-        if (order.cartItems && Array.isArray(order.cartItems)) {
-          order.cartItems.forEach(item => {
-            const productId = item.productId.toString();
-            const existingData = productSalesMap.get(productId) || {
-              productId,
-              totalQty: 0,
-              totalRevenue: 0
-            };
-            
-            existingData.totalQty += item.quantity || 0;
-            existingData.totalRevenue += (item.quantity || 0) * (item.price || 0);
-            
-            productSalesMap.set(productId, existingData);
-          });
+      const topProductsData = await Order.aggregate([
+        // Only include orders with confirmed or delivered status
+        { $match: { orderStatus: { $in: [/delivered/i, /confirmed/i] } } },
+        // Unwind cartItems to work with individual items
+        { $unwind: "$cartItems" },
+        // Group by productId to calculate total revenue and quantity for each product
+        {
+          $group: {
+            _id: "$cartItems.productId",
+            totalRevenue: { $sum: { $multiply: ["$cartItems.quantity", "$cartItems.price"] } },
+            totalQuantity: { $sum: "$cartItems.quantity" }
+          }
+        },
+        // Sort by total revenue in descending order
+        { $sort: { totalRevenue: -1 } },
+        // Limit to top 5
+        { $limit: 5 },
+        // Lookup product details
+        {
+          $lookup: {
+            from: "products",
+            localField: "_id",
+            foreignField: "_id",
+            as: "productInfo"
+          }
+        },
+        // Unwind the productInfo array
+        { $unwind: "$productInfo" },
+        // Project the final shape
+        {
+          $project: {
+            _id: "$_id",
+            title: "$productInfo.title",
+            totalQty: "$totalQuantity",
+            revenue: "$totalRevenue"
+          }
         }
-      });
+      ]);
       
-      // Convert map to array and sort by revenue
-      const sortedProducts = Array.from(productSalesMap.values())
-        .sort((a, b) => b.totalRevenue - a.totalRevenue)
-        .slice(0, 5);
-      
-      // Get product details for the top products
-      const productIds = sortedProducts.map(p => p.productId);
-      const products = await Product.find({ _id: { $in: productIds } })
-        .select('_id title')
-        .lean();
-      
-      // Create a product lookup map
-      const productMap = new Map();
-      products.forEach(p => {
-        productMap.set(p._id.toString(), p.title);
-      });
-      
-      // Format the final top products data
-      finalStats.topProducts = sortedProducts.map(p => ({
-        _id: p.productId,
-        title: productMap.get(p.productId) || 'Unknown Product',
-        totalQty: p.totalQty,
-        revenue: p.totalRevenue
-      }));
+      finalStats.topProducts = topProductsData;
       
       console.log("Top products:", finalStats.topProducts);
       
       // Fallback if no products found
       if (finalStats.topProducts.length === 0) {
+        console.log("Creating fallback top products");
         finalStats.topProducts = [
           { _id: "1", title: "Product A", totalQty: 15, revenue: 1500 },
           { _id: "2", title: "Product B", totalQty: 8, revenue: 1200 },
@@ -139,88 +130,66 @@ export const getOrderStats = async (req, res) => {
       ];
     }
 
-    // Alternative Approach 2: Get Sales by Category
+    // Approach 2: Get Sales by Category using Aggregation
     try {
-      console.log("=== Getting Category Sales (Alternative Approach) ===");
+      console.log("=== Getting Category Sales using Aggregation ===");
       
-      // Get all orders with delivered or confirmed status
-      const completedOrders = await Order.find({
-        orderStatus: { $in: [/delivered/i, /confirmed/i] }
-      }).select('cartItems').lean();
-      
-      // Create a map to store category sales data
-      const categorySalesMap = new Map();
-      
-      // Collect all unique product IDs from orders
-      const allProductIds = new Set();
-      completedOrders.forEach(order => {
-        if (order.cartItems && Array.isArray(order.cartItems)) {
-          order.cartItems.forEach(item => {
-            if (item.productId) {
-              allProductIds.add(item.productId.toString());
-            }
-          });
+      const categorySalesData = await Order.aggregate([
+        // Only include orders with confirmed or delivered status
+        { $match: { orderStatus: { $in: [/delivered/i, /confirmed/i] } } },
+        // Unwind cartItems to work with individual items
+        { $unwind: "$cartItems" },
+        // Lookup product details to get categoryId
+        {
+          $lookup: {
+            from: "products",
+            localField: "cartItems.productId",
+            foreignField: "_id",
+            as: "productInfo"
+          }
+        },
+        // Unwind the productInfo array
+        { $unwind: "$productInfo" },
+        // Lookup category details
+        {
+          $lookup: {
+            from: "categories",
+            localField: "productInfo.categoryId",
+            foreignField: "_id",
+            as: "categoryInfo"
+          }
+        },
+        // Unwind the categoryInfo array
+        { $unwind: "$categoryInfo" },
+        // Group by categoryId to calculate total revenue for each category
+        {
+          $group: {
+            _id: "$productInfo.categoryId",
+            name: { $first: "$categoryInfo.name" },
+            totalRevenue: { $sum: { $multiply: ["$cartItems.quantity", "$cartItems.price"] } }
+          }
+        },
+        // Sort by total revenue in descending order
+        { $sort: { totalRevenue: -1 } },
+        // Limit to top 5
+        { $limit: 5 },
+        // Project the final shape
+        {
+          $project: {
+            _id: 0,
+            name: "$name",
+            value: "$totalRevenue"
+          }
         }
-      });
+      ]);
       
-      // Get all products with their categories
-      const products = await Product.find({ 
-        _id: { $in: Array.from(allProductIds) }
-      }).select('_id categoryId').lean();
-      
-      // Create a product to category mapping
-      const productCategoryMap = new Map();
-      products.forEach(p => {
-        productCategoryMap.set(p._id.toString(), p.categoryId?.toString());
-      });
-      
-      // Process each order's cartItems to calculate category sales
-      completedOrders.forEach(order => {
-        if (order.cartItems && Array.isArray(order.cartItems)) {
-          order.cartItems.forEach(item => {
-            const productId = item.productId.toString();
-            const categoryId = productCategoryMap.get(productId);
-            
-            if (categoryId) {
-              const existingData = categorySalesMap.get(categoryId) || {
-                categoryId,
-                totalRevenue: 0
-              };
-              
-              existingData.totalRevenue += (item.quantity || 0) * (item.price || 0);
-              categorySalesMap.set(categoryId, existingData);
-            }
-          });
-        }
-      });
-      
-      // Convert map to array and sort by revenue
-      const sortedCategories = Array.from(categorySalesMap.values())
-        .sort((a, b) => b.totalRevenue - a.totalRevenue)
-        .slice(0, 5);
-      
-      // Get category details for the top categories
-      const categoryIds = sortedCategories.map(c => c.categoryId);
-      const categories = await Category.find({ _id: { $in: categoryIds } })
-        .select('_id name')
-        .lean();
-      
-      // Create a category lookup map
-      const categoryMap = new Map();
-      categories.forEach(c => {
-        categoryMap.set(c._id.toString(), c.name);
-      });
-      
-      // Format the final category sales data
-      finalStats.categorySales = sortedCategories.map(c => ({
-        name: categoryMap.get(c.categoryId) || 'Unknown Category',
-        value: c.totalRevenue
-      }));
+      finalStats.categorySales = categorySalesData;
       
       console.log("Category sales:", finalStats.categorySales);
       
       // Fallback if no categories found
       if (finalStats.categorySales.length === 0) {
+        console.log("Creating category fallback");
         finalStats.categorySales = [
           { name: "Electronics", value: 8000 },
           { name: "Clothing", value: 6000 },
