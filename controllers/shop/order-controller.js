@@ -2,51 +2,55 @@ import Stripe from "stripe";
 import Order from "../../models/Order.js";
 import Cart from "../../models/Cart.js";
 import Product from "../../models/Product.js";
+import User from "../../models/User.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2025-01-27.acacia", // use latest available
+  apiVersion: "2025-01-27.acacia",
 });
 
-//  Create order for both Stripe and Cash on Delivery
+// Create order for both Stripe and COD
 export const createOrder = async (req, res) => {
   try {
     const {
       userId,
       cartId,
-      userName: user.userName,
-  userEmail: user.email,
       cartItems,
       addressInfo,
       totalAmount,
-      paymentMethod, // This will be 'stripe' or 'cod'
+      paymentMethod,
     } = req.body;
-      console.log("Incoming order payload:", req.body);
-    // --- Cash on Delivery (COD) Logic ---
-    if (paymentMethod === 'cod') {
-      // 1. Create the new order with COD-specific statuses
+
+    console.log("Incoming order payload:", req.body);
+
+    // ✅ Fetch REAL user info
+    const user = await User.findById(userId).select("userName email");
+    const userName = user?.userName || "";
+    const userEmail = user?.email || "";
+
+    // ----- ✅ CASH ON DELIVERY -----
+    if (paymentMethod === "cod") {
       const newOrder = new Order({
         userId,
         cartId,
-        userName: user.userName,
-  userEmail: user.email,
+        userName,
+        userEmail,
         cartItems,
         addressInfo,
         totalAmount,
         paymentMethod: "Cash on Delivery",
-        paymentStatus: "Pending", // Payment is collected on delivery
-        orderStatus: "confirmed",   // The order is confirmed immediately
+        paymentStatus: "Pending",
+        orderStatus: "confirmed",
         orderDate: new Date(),
         orderUpdateDate: new Date(),
       });
 
-      // 2. Decrease stock for each product in the order
+      // ✅ Decrease product stock
       for (let item of cartItems) {
         let product = await Product.findById(item.productId);
         if (product && product.totalStock >= item.quantity) {
           product.totalStock -= item.quantity;
           await product.save();
         } else {
-          // Handle case where stock is insufficient
           return res.status(400).json({
             success: false,
             message: `Not enough stock for ${item.title}`,
@@ -54,32 +58,28 @@ export const createOrder = async (req, res) => {
         }
       }
 
-      // 3. Delete the user's cart
-      // Clear the user's cart after placing order
-    if (req.body.cartId) {
-      await Cart.findByIdAndUpdate(req.body.cartId, { items: [] });
-    }
-      await Cart.findByIdAndDelete(cartId);
-      
-      // 4. Save the order and send success response
+      // ✅ Clear cart
+      if (cartId) {
+        await Cart.findByIdAndUpdate(cartId, { items: [] });
+        await Cart.findByIdAndDelete(cartId);
+      }
+
       const savedOrder = await newOrder.save();
       return res.status(201).json({
         success: true,
-        message: "Order placed successfully with Cash on Delivery!",
+        message: "COD order placed successfully!",
         data: savedOrder,
       });
     }
-  
 
-    // --- Stripe Payment Logic ---
-    else if (paymentMethod === 'stripe') {
-      // 1. Save a pending order in DB (as before)
+    // ----- ✅ STRIPE -----
+    else if (paymentMethod === "stripe") {
       const newOrder = new Order({
         userId,
         cartId,
+        userName,
+        userEmail,
         cartItems,
-        userName: user.userName,
-  userEmail: user.email,
         addressInfo,
         orderStatus: "pending",
         paymentMethod: "stripe",
@@ -88,9 +88,9 @@ export const createOrder = async (req, res) => {
         orderDate: new Date(),
         orderUpdateDate: new Date(),
       });
+
       await newOrder.save();
 
-      // 2. Create Stripe Checkout session (as before)
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         mode: "payment",
@@ -101,7 +101,7 @@ export const createOrder = async (req, res) => {
               name: item.title,
               images: [item.image],
             },
-            unit_amount: Math.round(item.price * 100), // Stripe needs cents
+            unit_amount: Math.round(item.price * 100),
           },
           quantity: item.quantity,
         })),
@@ -114,12 +114,13 @@ export const createOrder = async (req, res) => {
 
       return res.status(200).json({ success: true, url: session.url });
     }
-    
-    // Handle cases where paymentMethod is not provided or invalid
-    else {
-        return res.status(400).json({ success: false, message: "Invalid payment method specified." });
-    }
 
+    // ❌ Invalid payment method
+    else {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid payment method." });
+    }
   } catch (e) {
     console.error("Error in createOrder:", e);
     res.status(500).json({ success: false, message: "Error creating order" });
