@@ -4,6 +4,7 @@ import Order from "../../models/Order.js";
 import Product from "../../models/Product.js";
 import Category from "../../models/Category.js";
 import Brand from "../../models/Brand.js";
+import User from "../../models/User.js";
 
 //------------------------------------------------
 // Helper: detect the item array field present in orders
@@ -136,26 +137,21 @@ export const getOrderStats = async (req, res) => {
     // 6) Top Customers (lifetime)
     //------------------------------------------------
 
-const topCustAgg = await Order.aggregate([
-  {
-    $group: {
-      _id: "$userId",
-      totalSpent: { $sum: "$totalAmount" },
-      orderCount: { $sum: 1 },
-      name: { $first: "$addressInfo.name" },
-      phone: { $first: "$addressInfo.phone" },
-    }
-  },
-  { $sort: { totalSpent: -1 } },
-  { $limit: 5 }
-]);
+const topCustomers = await Promise.all(
+  topCustAgg.map(async (c) => {
+    const user = await User.findById(c._id).select("userName email");
+    return {
+      userId: c._id,
+      name: user?.userName || "Unknown",
+      email: user?.email || "",
+      orderCount: c.orderCount,
+      totalSpent: c.totalSpent,
+    };
+  })
+);
 
-finalStats.topCustomers = topCustAgg.map((c) => ({
-  userId: c._id,
-  name: c.name || c.phone || "Unknown",
-  orderCount: c.orderCount,
-  totalSpent: c.totalSpent,
-}));
+finalStats.topCustomers = topCustomers;
+
 
 
     //------------------------------------------------
