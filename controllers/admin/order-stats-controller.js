@@ -135,94 +135,85 @@ export const getOrderStats = async (req, res) => {
     //------------------------------------------------
     // 6) Top Customers (lifetime)
     //------------------------------------------------
-    try {
-      const topCustomersAgg = await Order.aggregate([
-        {
-          $group: {
-            _id: "$userId",
-            totalSpent: { $sum: "$totalAmount" },
-            orderCount: { $sum: 1 },
-          },
-        },
-        { $sort: { totalSpent: -1 } },
-        { $limit: 5 },
-      ]);
 
-      const topCustomers = await Promise.all(
-        topCustomersAgg.map(async (c) => {
-          try {
-            const user = await mongoose
-              .model("User")
-              .findById(c._id)
-              .select("userName email")
-              .lean();
-            return {
-              userId: c._id,
-              name: user?.userName || "Unknown",
-              email: user?.email || "",
-              totalSpent: c.totalSpent || 0,
-              orderCount: c.orderCount || 0,
-            };
-          } catch {
-            return null;
-          }
-        })
-      );
+try {
+  const topCustAgg = await Order.aggregate([
+    {
+      $group: {
+        _id: "$userId",
+        totalSpent: { $sum: "$totalAmount" },
+        orderCount: { $sum: 1 },
+        name: { $first: "$addressInfo.name" },        // ✅ fallback name
+        userName: { $first: "$userName" },            // if you store
+        email: { $first: "$addressInfo.email" },
+      }
+    },
+    { $sort: { totalSpent: -1 } },
+    { $limit: 5 }
+  ]);
 
-      finalStats.topCustomers = topCustomers.filter(Boolean);
-    } catch {}
+  finalStats.topCustomers = topCustAgg.map((c) => ({
+    userId: c._id,
+    name: c.userName || c.name || "Unknown",
+    email: c.email || "",
+    totalSpent: c.totalSpent,
+    orderCount: c.orderCount,
+  }));
+} catch {}
+
 
     //------------------------------------------------
     // 7) Brand Sales Performance (lifetime)
     //------------------------------------------------
-    try {
-      const brandAgg = await Order.aggregate([
-        { $match: { [itemField]: { $exists: true, $ne: [] } } },
-        { $unwind: `$${itemField}` },
-        // handles number/string price & qty
-        {
-          $addFields: {
-            _qty: { $toDouble: { $ifNull: [`$${itemField}.quantity`, 0] } },
-            _price: { $toDouble: { $ifNull: [`$${itemField}.price`, 0] } },
-          },
-        },
-        {
-          $lookup: {
-            from: "products",
-            localField: `${itemField}.productId`,
-            foreignField: "_id",
-            as: "product",
-          },
-        },
-        { $unwind: "$product" },
-        {
-          $group: {
-            _id: "$product.brandId",
-            revenue: { $sum: { $multiply: ["$_qty", "$_price"] } },
-            qty: { $sum: "$_qty" },
-          },
-        },
-        { $sort: { revenue: -1 } },
-        { $limit: 5 },
-      ]);
 
-      const brandSales = await Promise.all(
-        brandAgg.map(async (b) => {
-          try {
-            const brand = await Brand.findById(b._id).select("name").lean();
-            return {
-              brand: brand?.name || "Unknown",
-              revenue: b.revenue || 0,
-              qty: b.qty || 0,
-            };
-          } catch {
-            return null;
-          }
-        })
-      );
+try {
+  const brandAgg = await Order.aggregate([
+    { $match: { [itemField]: { $exists: true, $ne: [] } } },
+    { $unwind: `$${itemField}` },
 
-      finalStats.brandSales = brandSales.filter(Boolean);
-    } catch {}
+    {
+      $addFields: {
+        qty: { $toDouble: { $ifNull: [`$${itemField}.quantity`, 0] } },
+        price: { $toDouble: { $ifNull: [`$${itemField}.price`, 0] } },
+      }
+    },
+
+    {
+      $lookup: {
+        from: "products",
+        localField: `${itemField}.productId`,
+        foreignField: "_id",
+        as: "product",
+      }
+    },
+    { $unwind: "$product" },
+
+    {
+      $lookup: {
+        from: "brands",
+        localField: "product.brandId",
+        foreignField: "_id",
+        as: "brand",
+      }
+    },
+    { $unwind: "$brand" },
+
+    {
+      $group: {
+        _id: "$brand._id",
+        brand: { $first: "$brand.name" },
+        revenue: { $sum: { $multiply: ["$qty", "$price"] } },
+        qty: { $sum: "$qty" }
+      }
+    },
+
+    { $sort: { revenue: -1 } },
+    { $limit: 5 }
+  ]);
+
+  finalStats.brandSalesPerformance = brandAgg;
+} catch {}
+
 
     //------------------------------------------------
     // 8) Payment Method Distribution (lifetime)
