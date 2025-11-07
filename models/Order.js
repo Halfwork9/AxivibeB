@@ -2,7 +2,11 @@ import mongoose from "mongoose";
 
 const OrderSchema = new mongoose.Schema({
   userId: String,
+  userName: { type: String },
+  userEmail: { type: String },
+
   cartId: String,
+
   cartItems: [
     {
       productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
@@ -12,6 +16,7 @@ const OrderSchema = new mongoose.Schema({
       quantity: Number,
     },
   ],
+
   addressInfo: {
     addressId: String,
     address: String,
@@ -20,6 +25,7 @@ const OrderSchema = new mongoose.Schema({
     phone: String,
     notes: String,
   },
+
   orderStatus: String,
   paymentMethod: String,
   paymentStatus: String,
@@ -30,7 +36,7 @@ const OrderSchema = new mongoose.Schema({
   payerId: String,
 });
 
-// ✅ Order indexes (CORRECT PLACE)
+// ✅ Index
 OrderSchema.index({ "cartItems.productId": 1 });
 OrderSchema.index({ orderStatus: 1 });
 
