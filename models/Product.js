@@ -2,7 +2,6 @@ import mongoose from "mongoose";
 
 const ProductSchema = new mongoose.Schema(
   {
-    // ✅ Change 'image' (String) to 'images' (Array of Strings)
     images: {
       type: [String],
       required: true,
@@ -36,10 +35,9 @@ const ProductSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-OrderSchema.index({ "cartItems.productId": 1 });
-OrderSchema.index({ orderStatus: 1 });
+
+// ✅ Product indexes
 ProductSchema.index({ categoryId: 1 });
 
 const Product = mongoose.model("Product", ProductSchema);
 export default Product;
-
