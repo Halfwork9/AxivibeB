@@ -170,46 +170,75 @@ try {
 } catch (err) {
   console.log("⚠ topCustomers error →", err.message);
 }
-//------------------------------------------------
- // ✅ BRAND SALES (uses brandId stored inside order)
-finalStats.brandSalesPerformance = await Order.aggregate([
-  { $match: { cartItems: { $exists: true, $ne: [] } } },
-  { $unwind: "$cartItems" },
-  {
-    $addFields: {
-      qty: { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } },
-      price: { $toDouble: { $ifNull: ["$cartItems.price", 0] } },
+// ✅ BRAND SALES PERFORMANCE
+try {
+  const brandAgg = await Order.aggregate([
+    { $match: { cartItems: { $exists: true, $ne: [] } } },
+    { $unwind: "$cartItems" },
+
+    // Convert data to numbers
+    {
+      $addFields: {
+        qty: { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } },
+        price: { $toDouble: { $ifNull: ["$cartItems.price", 0] } },
+      },
     },
-  },
-  {
-    $lookup: {
-      from: "products",
-      localField: "cartItems.productId",
-      foreignField: "_id",
-      as: "product",
+
+    // Join product → brand
+    {
+      $lookup: {
+        from: "products",
+        localField: "cartItems.productId",
+        foreignField: "_id",
+        as: "product",
+      },
     },
-  },
-  { $unwind: "$product" },
-  {
-    $lookup: {
-      from: "brands",
-      localField: "product.brandId",
-      foreignField: "_id",
-      as: "brand",
+    { $unwind: "$product" },
+
+    {
+      $lookup: {
+        from: "brands",
+        localField: "product.brandId",
+        foreignField: "_id",
+        as: "brand",
+      },
     },
-  },
-  { $unwind: "$brand" },
-  {
-    $group: {
-      _id: "$brand._id",
-      brand: { $first: "$brand.name" },
-      qty: { $sum: "$qty" },
-      revenue: { $sum: { $multiply: ["$qty", "$price"] } },
+    { $unwind: "$brand" },
+
+    // ✅ Group by brand
+    {
+      $group: {
+        _id: "$brand._id",
+        brand: { $first: "$brand.name" },
+        qty: { $sum: "$qty" },
+        revenue: { $sum: { $multiply: ["$qty", "$price"] } },
+        orderIds: { $addToSet: "$_id" }, // collect order ids
+      },
     },
-  },
-  { $sort: { revenue: -1 } },
-  { $limit: 10 },
-]);
+
+    // ✅ Count orders
+    {
+      $addFields: {
+        orderCount: { $size: "$orderIds" },
+      },
+    },
+
+    { $sort: { revenue: -1 } },
+    { $limit: 10 },
+  ]);
+
+  finalStats.brandSalesPerformance = brandAgg.map((b) => ({
+    _id: b._id,
+    brand: b.brand,
+    qty: b.qty,
+    revenue: b.revenue,
+    orderCount: b.orderCount,
+  }));
+} catch (e) {
+  console.log("⚠ brandSales error →", e.message);
+  finalStats.brandSalesPerformance = [];
+}
+
 
     //------------------------------------------------
     // 8) Payment Method Distribution (lifetime)
