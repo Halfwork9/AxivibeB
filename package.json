@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "fix-orders": "node scripts/fixOrderBrandCategory.js",
     "build": "echo 'No build step required for server'",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
