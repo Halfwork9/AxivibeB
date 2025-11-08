@@ -171,39 +171,29 @@ try {
   console.log("⚠ topCustomers error →", err.message);
 }
 //------------------------------------------------
-// ✅ LIFETIME BRAND SALES — COUNT ALL ORDERS
-//------------------------------------------------
-const rawBrandAgg = await Order.aggregate([
-  {
-    $project: {
-      items: {
-        $concatArrays: [
-          { $ifNull: ["$cartItems", []] },
-          { $ifNull: ["$items", []] }
-        ]
-      }
-    }
-  },
+// ✅ BRAND SALES PERFORMANCE (LIFETIME)
+const brandAgg = await Order.aggregate([
+  { $unwind: `$${itemField}` },
 
-  { $unwind: "$items" },
-
+  // join product
   {
     $lookup: {
       from: "products",
-      localField: "items.productId",
+      localField: `${itemField}.productId`,
       foreignField: "_id",
-      as: "product"
-    }
+      as: "product",
+    },
   },
   { $unwind: "$product" },
 
+  // join brand
   {
     $lookup: {
       from: "brands",
       localField: "product.brandId",
       foreignField: "_id",
-      as: "brand"
-    }
+      as: "brand",
+    },
   },
   { $unwind: "$brand" },
 
@@ -211,33 +201,32 @@ const rawBrandAgg = await Order.aggregate([
     $group: {
       _id: "$brand._id",
       brand: { $first: "$brand.name" },
-
-      // ✅ FIX: SUM ALL TIME
-      qty: { $sum: "$items.quantity" },
-
+      orderCount: { $addToSet: "$_id" }, // collect unique orders
+      qty: { $sum: `$${itemField}.quantity` },
       revenue: {
-        $sum: { $multiply: ["$items.quantity", "$items.price"] }
+        $sum: {
+          $multiply: [`$${itemField}.quantity`, `$${itemField}.price`],
+        },
       },
-
-      orderIds: { $addToSet: "$_id" }
-    }
+    },
   },
 
+  // calculate orderCount properly
   {
     $project: {
-      _id: 1,
       brand: 1,
       qty: 1,
       revenue: 1,
-      orderCount: { $size: "$orderIds" }
-    }
+      orderCount: { $size: "$orderCount" },
+    },
   },
 
-  { $sort: { qty: -1 } },   // ✅ SORT BY QTY — lifetime
-  { $limit: 5 }
+  { $sort: { revenue: -1 } },
+  { $limit: 5 },
 ]);
 
-finalStats.brandSalesPerformance = rawBrandAgg;
+finalStats.brandSalesPerformance = brandAgg;
+
 
     //------------------------------------------------
     // 8) Payment Method Distribution (lifetime)
