@@ -171,62 +171,37 @@ try {
   console.log("⚠ topCustomers error →", err.message);
 }
 //------------------------------------------------
-// ✅ BRAND SALES PERFORMANCE (LIFETIME)
-const brandAgg = await Order.aggregate([
-  { $unwind: `$${itemField}` },
-
-  // join product
-  {
-    $lookup: {
-      from: "products",
-      localField: `${itemField}.productId`,
-      foreignField: "_id",
-      as: "product",
-    },
-  },
-  { $unwind: "$product" },
-
-  // join brand
-  {
-    $lookup: {
-      from: "brands",
-      localField: "product.brandId",
-      foreignField: "_id",
-      as: "brand",
-    },
-  },
-  { $unwind: "$brand" },
-
-  {
-    $group: {
-      _id: "$brand._id",
-      brand: { $first: "$brand.name" },
-      orderCount: { $addToSet: "$_id" }, // collect unique orders
-      qty: { $sum: `$${itemField}.quantity` },
-      revenue: {
-        $sum: {
-          $multiply: [`$${itemField}.quantity`, `$${itemField}.price`],
+ // ✅ BRAND SALES (uses brandId stored inside order)
+    stats.brandSalesPerformance = await Order.aggregate([
+      { $unwind: "$cartItems" },
+      {
+        $group: {
+          _id: "$cartItems.brandId",
+          qty: { $sum: "$cartItems.quantity" },
+          revenue: {
+            $sum: { $multiply: ["$cartItems.quantity", "$cartItems.price"] },
+          },
         },
       },
-    },
-  },
-
-  // calculate orderCount properly
-  {
-    $project: {
-      brand: 1,
-      qty: 1,
-      revenue: 1,
-      orderCount: { $size: "$orderCount" },
-    },
-  },
-
-  { $sort: { revenue: -1 } },
-  { $limit: 5 },
-]);
-
-finalStats.brandSalesPerformance = brandAgg;
-
+      {
+        $lookup: {
+          from: "brands",
+          localField: "_id",
+          foreignField: "_id",
+          as: "brand",
+        },
+      },
+      { $unwind: "$brand" },
+      {
+        $project: {
+          brand: "$brand.name",
+          qty: 1,
+          revenue: 1,
+        },
+      },
+      { $sort: { revenue: -1 } },
+      { $limit: 10 },
+    ]);
 
     //------------------------------------------------
     // 8) Payment Method Distribution (lifetime)
