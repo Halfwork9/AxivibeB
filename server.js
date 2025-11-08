@@ -10,7 +10,7 @@ import axios from "axios";
 import path from "path";
 import { fileURLToPath } from "url";
 import history from "connect-history-api-fallback";
-import fixOrders from "./scripts/fixOrderBrandCategory.js";
+
 // --- Routes ---
 import brandRoutes from "./routes/admin/brand-routes.js";
 import authRouter from "./routes/auth/auth-routes.js";
@@ -175,13 +175,6 @@ mongoose
   .connect(process.env.MONGO_URI)
   .then(async () => {
     console.log("✅ MongoDB connected");
-
-    try {
-      await fixOrders();
-      console.log("✅ Migration completed");
-    } catch (err) {
-      console.log("⚠ Migration failed:", err.message);
-    }
 
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
