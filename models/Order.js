@@ -14,6 +14,8 @@ const OrderSchema = new mongoose.Schema({
       image: String,
       price: { type: Number, required: true },
       quantity: Number,
+       brandId: { type: mongoose.Schema.Types.ObjectId, ref: "Brand" },
+      categoryId: { type: mongoose.Schema.Types.ObjectId, ref: "Category" },
     },
   ],
 
@@ -38,6 +40,8 @@ const OrderSchema = new mongoose.Schema({
 
 // ✅ Index
 OrderSchema.index({ "cartItems.productId": 1 });
+OrderSchema.index({ "cartItems.brandId": 1 });
+OrderSchema.index({ "cartItems.categoryId": 1 });
 OrderSchema.index({ orderStatus: 1 });
 
 const Order = mongoose.model("Order", OrderSchema);
