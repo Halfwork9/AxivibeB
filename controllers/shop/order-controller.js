@@ -8,7 +8,6 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: "2025-01-27.acacia",
 });
 
-// Create order for both Stripe and COD
 export const createOrder = async (req, res) => {
   try {
     const {
@@ -17,68 +16,62 @@ export const createOrder = async (req, res) => {
       cartItems,
       addressInfo,
       totalAmount,
-      paymentMethod,
+      paymentMethod
     } = req.body;
 
-    console.log("Incoming order payload:", req.body);
-
-    // ✅ Fetch REAL user info
     const user = await User.findById(userId).select("userName email");
-    const userName = user?.userName || "";
-    const userEmail = user?.email || "";
 
-    // ----- ✅ CASH ON DELIVERY -----
+    // ✅ Inject brandId + categoryId inside each cartItem
+    for (let item of cartItems) {
+      const product = await Product.findById(item.productId).select(
+        "brandId categoryId"
+      );
+
+      item.brandId = product?.brandId ?? null;
+      item.categoryId = product?.categoryId ?? null;
+    }
+
+    // ✅ COD ORDER
     if (paymentMethod === "cod") {
       const newOrder = new Order({
         userId,
+        userName: user?.userName ?? "",
+        userEmail: user?.email ?? "",
         cartId,
-        userName,
-        userEmail,
         cartItems,
         addressInfo,
         totalAmount,
-        paymentMethod: "Cash on Delivery",
-        paymentStatus: "Pending",
+        paymentMethod: "cod",
+        paymentStatus: "pending",
         orderStatus: "confirmed",
         orderDate: new Date(),
         orderUpdateDate: new Date(),
       });
 
-      // ✅ Decrease product stock
+      // ✅ Decrease stock
       for (let item of cartItems) {
-        let product = await Product.findById(item.productId);
-        if (product && product.totalStock >= item.quantity) {
-          product.totalStock -= item.quantity;
-          await product.save();
-        } else {
-          return res.status(400).json({
-            success: false,
-            message: `Not enough stock for ${item.title}`,
-          });
-        }
+        await Product.findByIdAndUpdate(item.productId, {
+          $inc: { totalStock: -item.quantity },
+        });
       }
 
-      // ✅ Clear cart
-      if (cartId) {
-        await Cart.findByIdAndUpdate(cartId, { items: [] });
-        await Cart.findByIdAndDelete(cartId);
-      }
-
+      await Cart.findByIdAndDelete(cartId);
       const savedOrder = await newOrder.save();
+
       return res.status(201).json({
         success: true,
-        message: "COD order placed successfully!",
+        message: "Order placed successfully!",
         data: savedOrder,
       });
     }
 
-    // ----- ✅ STRIPE -----
-    else if (paymentMethod === "stripe") {
+    // ✅ STRIPE ORDER
+    if (paymentMethod === "stripe") {
       const newOrder = new Order({
         userId,
+        userName: user?.userName ?? "",
+        userEmail: user?.email ?? "",
         cartId,
-        userName,
-        userEmail,
         cartItems,
         addressInfo,
         orderStatus: "pending",
@@ -107,25 +100,19 @@ export const createOrder = async (req, res) => {
         })),
         success_url: `https://nikhilmamdekar.site/shop/payment-success?orderId=${newOrder._id}`,
         cancel_url: `https://nikhilmamdekar.site/shop/payment-cancel`,
-        metadata: {
-          orderId: newOrder._id.toString(),
-        },
+        metadata: { orderId: newOrder._id.toString() },
       });
 
       return res.status(200).json({ success: true, url: session.url });
     }
 
-    // ❌ Invalid payment method
-    else {
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid payment method." });
-    }
-  } catch (e) {
-    console.error("Error in createOrder:", e);
+    return res.status(400).json({ success: false, message: "Invalid payment method." });
+  } catch (error) {
+    console.error("Error in createOrder:", error);
     res.status(500).json({ success: false, message: "Error creating order" });
   }
 };
+
 
 
 //  Webhook to confirm payment (No changes needed here)
