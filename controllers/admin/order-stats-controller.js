@@ -172,7 +172,7 @@ try {
 }
 //------------------------------------------------
  // ✅ BRAND SALES (uses brandId stored inside order)
-    stats.brandSalesPerformance = await Order.aggregate([
+finalStats.brandSalesPerformance = await Order.aggregate([
       { $unwind: "$cartItems" },
       {
         $group: {
