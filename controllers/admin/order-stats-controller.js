@@ -173,35 +173,43 @@ try {
 //------------------------------------------------
  // ✅ BRAND SALES (uses brandId stored inside order)
 finalStats.brandSalesPerformance = await Order.aggregate([
-      { $unwind: "$cartItems" },
-      {
-        $group: {
-          _id: "$cartItems.brandId",
-          qty: { $sum: "$cartItems.quantity" },
-          revenue: {
-            $sum: { $multiply: ["$cartItems.quantity", "$cartItems.price"] },
-          },
-        },
-      },
-      {
-        $lookup: {
-          from: "brands",
-          localField: "_id",
-          foreignField: "_id",
-          as: "brand",
-        },
-      },
-      { $unwind: "$brand" },
-      {
-        $project: {
-          brand: "$brand.name",
-          qty: 1,
-          revenue: 1,
-        },
-      },
-      { $sort: { revenue: -1 } },
-      { $limit: 10 },
-    ]);
+  { $match: { cartItems: { $exists: true, $ne: [] } } },
+  { $unwind: "$cartItems" },
+  {
+    $addFields: {
+      qty: { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } },
+      price: { $toDouble: { $ifNull: ["$cartItems.price", 0] } },
+    },
+  },
+  {
+    $lookup: {
+      from: "products",
+      localField: "cartItems.productId",
+      foreignField: "_id",
+      as: "product",
+    },
+  },
+  { $unwind: "$product" },
+  {
+    $lookup: {
+      from: "brands",
+      localField: "product.brandId",
+      foreignField: "_id",
+      as: "brand",
+    },
+  },
+  { $unwind: "$brand" },
+  {
+    $group: {
+      _id: "$brand._id",
+      brand: { $first: "$brand.name" },
+      qty: { $sum: "$qty" },
+      revenue: { $sum: { $multiply: ["$qty", "$price"] } },
+    },
+  },
+  { $sort: { revenue: -1 } },
+  { $limit: 10 },
+]);
 
     //------------------------------------------------
     // 8) Payment Method Distribution (lifetime)
