@@ -262,3 +262,66 @@ export const getOrderDetails = async (req, res) => {
     res.status(500).json({ success: false, message: "Some error occurred!" });
   }
 };
+
+export const cancelOrder = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    const order = await Order.findById(orderId);
+    if (!order) return res.status(404).json({ success:false, message:"Order not found" });
+
+    // ✅ restrict
+    if (["delivered", "returned", "cancelled"].includes(order.orderStatus)) {
+      return res.status(400).json({ success:false, message:"Order cannot be cancelled" });
+    }
+
+    // ✅ restore stock
+    for (const item of order.cartItems) {
+      await Product.findByIdAndUpdate(item.productId, {
+        $inc: { totalStock: item.quantity },
+      });
+    }
+
+    order.orderStatus = "cancelled";
+    order.orderUpdateDate = new Date();
+    await order.save();
+
+    return res.json({ success:true, message:"Order cancelled successfully", data: order });
+
+  } catch (error) {
+    console.error("Cancel Order Error => ", error);
+    return res.status(500).json({ success:false, message:"Failed to cancel order" });
+  }
+};
+
+export const returnOrder = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    const order = await Order.findById(orderId);
+    if (!order) return res.status(404).json({ success:false, message:"Order not found" });
+
+    // ✅ allowed only when delivered
+    if (order.orderStatus !== "delivered") {
+      return res.status(400).json({ success:false, message:"Return request not allowed" });
+    }
+
+    // ✅ stock reversal
+    for (const item of order.cartItems) {
+      await Product.findByIdAndUpdate(item.productId, {
+        $inc: { totalStock: item.quantity },
+      });
+    }
+
+    order.orderStatus = "returned";
+    order.orderUpdateDate = new Date();
+    await order.save();
+
+    return res.json({ success:true, message:"Order returned successfully", data: order });
+
+  } catch (error) {
+    console.error("Return Order Error => ", error);
+    return res.status(500).json({ success:false, message:"Failed to return order" });
+  }
+};
+ 
