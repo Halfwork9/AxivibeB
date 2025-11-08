@@ -38,6 +38,8 @@ async function fixOrders() {
   await mongoose.disconnect();
 }
 
+export default fixOrders;
+
 fixOrders()
   .then(() => {
     console.log("🏁 All done");
