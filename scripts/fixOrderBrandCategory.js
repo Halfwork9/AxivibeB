@@ -40,12 +40,4 @@ async function fixOrders() {
 
 export default fixOrders;
 
-fixOrders()
-  .then(() => {
-    console.log("🏁 All done");
-    process.exit(0);
-  })
-  .catch((err) => {
-    console.error("❌ Migration failed", err);
-    process.exit(1);
-  });
+
