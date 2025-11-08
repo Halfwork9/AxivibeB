@@ -172,12 +172,20 @@ app.get("*", (req, res) => {
 
 // --- MongoDB Connection ---
 mongoose
-  .connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => {
+  .connect(process.env.MONGO_URI)
+  .then(async () => {
     console.log("✅ MongoDB connected");
-    await fixOrders();  
+
+    try {
+      // ✅ Run migration once
+      await fixOrders();
+      console.log("✅ Order migration completed");
+    } catch (err) {
+      console.log("⚠ Migration error:", err.message);
+    }
+
     app.listen(PORT, () =>
       console.log(`🚀 Server running on port ${PORT}`)
     );
   })
-  .catch((err) => console.error("❌ MongoDB connection error:", err));
+  .catch((err) => console.log("❌ DB error:", err.message));
