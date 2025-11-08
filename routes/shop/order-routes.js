@@ -5,6 +5,8 @@ import {
   getAllOrdersByUser,
   getOrderDetails,
   verifyStripePayment,
+  cancelOrder, 
+  returnOrder,
 } from "../../controllers/shop/order-controller.js";
 
 const router = express.Router();
@@ -23,5 +25,7 @@ router.post(
 router.get("/list/:userId", getAllOrdersByUser);
 router.get("/details/:id", getOrderDetails);
 router.post("/verify-payment", verifyStripePayment);
+router.put("/cancel/:orderId", cancelOrder);
+router.put("/return/:orderId", returnOrder);
 
 export default router;
