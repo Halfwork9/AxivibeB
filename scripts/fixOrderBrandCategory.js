@@ -1,41 +1,49 @@
+import mongoose from "mongoose";
+import dotenv from "dotenv";
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 
-async function fixOrders() {
-  console.log("🔄 Running Order migration...");
+dotenv.config();
 
+async function fixOrders() {
+  console.log("🔄 Starting enhanced order migration...");
+
+  await mongoose.connect(process.env.MONGO_URI);
   const orders = await Order.find({ "cartItems.productId": { $exists: true } });
 
   for (const order of orders) {
     let changed = false;
 
-    order.cartItems = await Promise.all(
-      order.cartItems.map(async (item) => {
-        if (!item.productId) return item;
+    for (const item of order.cartItems) {
+      if (!item.productId) continue;
 
+      // Only update if brandId missing
+      if (!item.brandId || !item.categoryId) {
         const product = await Product.findById(item.productId).lean();
-        if (!product) return item;
-
-        if (product.brandId && !item.brandId) {
-          item.brandId = product.brandId;
+        if (product) {
+          item.brandId = product.brandId || item.brandId;
+          item.categoryId = product.categoryId || item.categoryId;
           changed = true;
         }
-        if (product.categoryId && !item.categoryId) {
-          item.categoryId = product.categoryId;
-          changed = true;
-        }
-
-        return item;
-      })
-    );
+      }
+    }
 
     if (changed) {
       await order.save();
-      console.log(`✅ Updated order → ${order._id}`);
+      console.log(`✅ Updated order ${order._id}`);
     }
   }
 
-  console.log("✅ Migration completed");
+  console.log("✅ Migration done. Closing connection...");
+  await mongoose.disconnect();
 }
 
-export default fixOrders;
+fixOrders()
+  .then(() => {
+    console.log("🏁 All done");
+    process.exit(0);
+  })
+  .catch((err) => {
+    console.error("❌ Migration failed", err);
+    process.exit(1);
+  });
