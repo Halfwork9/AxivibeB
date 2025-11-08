@@ -10,7 +10,7 @@ import axios from "axios";
 import path from "path";
 import { fileURLToPath } from "url";
 import history from "connect-history-api-fallback";
-
+import fixOrders from "./scripts/fixOrderBrandCategory.js";
 // --- Routes ---
 import brandRoutes from "./routes/admin/brand-routes.js";
 import authRouter from "./routes/auth/auth-routes.js";
@@ -175,6 +175,7 @@ mongoose
   .connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => {
     console.log("✅ MongoDB connected");
+    await fixOrders();  
     app.listen(PORT, () =>
       console.log(`🚀 Server running on port ${PORT}`)
     );
