@@ -128,32 +128,6 @@ export const getOrderStats = async (req, res) => {
     } catch (e) {
       console.log("⚠ Revenue calc error →", e.message);
     }
-//------------------------------------------------
-// ✅ Determine Best Brand
-//------------------------------------------------
-try {
-  if (finalStats.brandSalesPerformance?.length > 0) {
-    finalStats.bestSellingBrand = finalStats.brandSalesPerformance[0].brand || null;
-  } else {
-    finalStats.bestSellingBrand = null;
-  }
-} catch {
-  finalStats.bestSellingBrand = null;
-}
-
-
-//------------------------------------------------
-// ✅ Determine Best Category
-//------------------------------------------------
-try {
-  if (finalStats.categorySales?.length > 0) {
-    finalStats.bestSellingCategory = finalStats.categorySales[0].name || null;
-  } else {
-    finalStats.bestSellingCategory = null;
-  }
-} catch {
-  finalStats.bestSellingCategory = null;
-}
 
     //------------------------------------------------
     // 2) Low stock
@@ -266,6 +240,7 @@ try {
   finalStats.topProducts = [];
 }
 
+
     //------------------------------------------------
     // 6) Top Customers (lifetime)
     //------------------------------------------------
@@ -372,6 +347,31 @@ try {
   finalStats.brandSalesPerformance = [];
 }
 
+//------------------------------------------------
+// ✅ Determine Best Brand
+//------------------------------------------------
+try {
+  if (finalStats.brandSalesPerformance?.length > 0) {
+    finalStats.bestSellingBrand = finalStats.brandSalesPerformance[0].brand;
+  } else {
+    finalStats.bestSellingBrand = null;
+  }
+} catch {
+  finalStats.bestSellingBrand = null;
+}
+
+//------------------------------------------------
+// ✅ Determine Best Category
+//------------------------------------------------
+try {
+  if (finalStats.categorySales?.length > 0) {
+    finalStats.bestSellingCategory = finalStats.categorySales[0].name;
+  } else {
+    finalStats.bestSellingCategory = null;
+  }
+} catch {
+  finalStats.bestSellingCategory = null;
+}
 
     //------------------------------------------------
     // 8) Payment Method Distribution (lifetime)
@@ -391,43 +391,7 @@ try {
       }));
     } catch {}
 
-    //------------------------------------------------
-    // 9) Top Products (lifetime)
-    //------------------------------------------------
-    try {
-      const topProductsAgg = await Order.aggregate([
-        { $match: { [itemField]: { $exists: true, $ne: [] } } },
-        { $unwind: `$${itemField}` },
-        {
-          $addFields: {
-            _qty: { $toDouble: { $ifNull: [`$${itemField}.quantity`, 0] } },
-            _price: { $toDouble: { $ifNull: [`$${itemField}.price`, 0] } },
-          },
-        },
-        {
-          $lookup: {
-            from: "products",
-            localField: `${itemField}.productId`,
-            foreignField: "_id",
-            as: "product",
-          },
-        },
-        { $unwind: "$product" },
-        {
-          $group: {
-            _id: "$product._id",
-            title: { $first: "$product.title" },
-            image: { $first: { $arrayElemAt: ["$product.images", 0] } },
-            totalQty: { $sum: "$_qty" },
-            revenue: { $sum: { $multiply: ["$_qty", "$_price"] } },
-          },
-        },
-        { $sort: { revenue: -1 } },
-        { $limit: 5 },
-      ]);
-      finalStats.topProducts = topProductsAgg;
-    } catch {}
-
+   
     //------------------------------------------------
     // 10) Top Categories by Revenue (lifetime)
     //------------------------------------------------
