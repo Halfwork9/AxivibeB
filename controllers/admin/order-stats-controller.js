@@ -132,24 +132,25 @@ export const getOrderStats = async (req, res) => {
 // ✅ Determine Best Brand
 //------------------------------------------------
 try {
-  const bestBrand = Array.isArray(finalStats.brandSalesPerformance)
-    ? finalStats.brandSalesPerformance[0]
-    : null;
-
-  finalStats.bestSellingBrand = bestBrand?.brand ?? null;
+  if (finalStats.brandSalesPerformance?.length > 0) {
+    finalStats.bestSellingBrand = finalStats.brandSalesPerformance[0].brand || null;
+  } else {
+    finalStats.bestSellingBrand = null;
+  }
 } catch {
   finalStats.bestSellingBrand = null;
 }
+
 
 //------------------------------------------------
 // ✅ Determine Best Category
 //------------------------------------------------
 try {
-  const bestCategory = Array.isArray(finalStats.categorySales)
-    ? finalStats.categorySales[0]
-    : null;
-
-  finalStats.bestSellingCategory = bestCategory?.name ?? null;
+  if (finalStats.categorySales?.length > 0) {
+    finalStats.bestSellingCategory = finalStats.categorySales[0].name || null;
+  } else {
+    finalStats.bestSellingCategory = null;
+  }
 } catch {
   finalStats.bestSellingCategory = null;
 }
@@ -206,21 +207,18 @@ try {
         totalOrders > 0 ? Number(((returned / totalOrders) * 100).toFixed(2)) : 0;
     } catch {}
  //------------------------------------------------
-
 //------------------------------------------------
-// ✅ Top Products By Unique Buyers + Qty
+// ✅ Top Products By Unique Buyers + Quantity Sold
 //------------------------------------------------
 try {
   const topProductsAgg = await Order.aggregate([
     { $match: { [itemField]: { $exists: true, $ne: [] } } },
     { $unwind: `$${itemField}` },
 
-    // Normalize qty + price
     {
       $addFields: {
         qty: { $toDouble: { $ifNull: [`$${itemField}.quantity`, 0] } },
-        price: { $toDouble: { $ifNull: [`$${itemField}.price`, 0] } },
-      }
+      },
     },
 
     // Join product
@@ -230,45 +228,41 @@ try {
         localField: `${itemField}.productId`,
         foreignField: "_id",
         as: "product",
-      }
+      },
     },
     { $unwind: "$product" },
 
-    // ✅ Group data
     {
       $group: {
         _id: "$product._id",
         title: { $first: "$product.title" },
         image: { $first: { $arrayElemAt: ["$product.images", 0] } },
-
-        qty: { $sum: "$qty" },                     // Total quantity sold
-        buyers: { $addToSet: "$userId" },          // Unique customers
-      }
+        totalQty: { $sum: "$qty" },
+        buyersArr: { $addToSet: "$userId" },
+      },
     },
 
-    // ✅ Count unique buyers
     {
       $addFields: {
-        buyerCount: { $size: "$buyers" }
-      }
+        buyers: { $size: "$buyersArr" },
+      },
     },
 
-    // ✅ Sort by most buyers → then qty
-    { $sort: { buyerCount: -1, qty: -1 } },
+    // ✅ Sort primarily by # buyers, then qty
+    { $sort: { buyers: -1, totalQty: -1 } },
 
-    // ✅ Limit to 10
     { $limit: 10 },
   ]);
 
-  finalStats.topProducts = topProductsAgg.map(p => ({
+  finalStats.topProducts = topProductsAgg.map((p) => ({
     _id: p._id,
     title: p.title,
     image: p.image,
-    buyers: p.buyerCount ?? 0,
-    totalQty: p.qty ?? 0,
+    buyers: p.buyers ?? 0,
+    totalQty: p.totalQty ?? 0,
   }));
-} catch (err) {
-  console.log("⚠ topProducts error →", err.message);
+} catch (error) {
+  console.log("⚠ topProducts error →", error.message);
   finalStats.topProducts = [];
 }
 
