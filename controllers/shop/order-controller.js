@@ -1,3 +1,4 @@
+// ✅ controllers/shop/order-controller.js
 import Stripe from "stripe";
 import Order from "../../models/Order.js";
 import Cart from "../../models/Cart.js";
@@ -26,7 +27,6 @@ export const createOrder = async (req, res) => {
       const product = await Product.findById(item.productId).select(
         "brandId categoryId"
       );
-
       item.brandId = product?.brandId ?? null;
       item.categoryId = product?.categoryId ?? null;
     }
@@ -74,9 +74,12 @@ export const createOrder = async (req, res) => {
         cartId,
         cartItems,
         addressInfo,
-        orderStatus: "pending",
+
+        // ✅ TEMP CONFIRM immediately
+        orderStatus: "confirmed",
         paymentMethod: "stripe",
         paymentStatus: "pending",
+
         totalAmount,
         orderDate: new Date(),
         orderUpdateDate: new Date(),
@@ -98,8 +101,11 @@ export const createOrder = async (req, res) => {
           },
           quantity: item.quantity,
         })),
-        success_url: `https://nikhilmamdekar.site/shop/payment-success?orderId=${newOrder._id}`,
+
+        // ✅ Must include session_id
+        success_url: `https://nikhilmamdekar.site/shop/payment-success?orderId=${newOrder._id}&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `https://nikhilmamdekar.site/shop/payment-cancel`,
+
         metadata: { orderId: newOrder._id.toString() },
       });
 
@@ -112,7 +118,6 @@ export const createOrder = async (req, res) => {
     res.status(500).json({ success: false, message: "Error creating order" });
   }
 };
-
 
 
 //  Webhook to confirm payment (No changes needed here)
