@@ -206,19 +206,23 @@ try {
         totalOrders > 0 ? Number(((returned / totalOrders) * 100).toFixed(2)) : 0;
     } catch {}
  //------------------------------------------------
-   // ✅ Top products — ranked by most unique users
+   //  Top products — ranked by most unique users
 try {
   const topProductsAgg = await Order.aggregate([
     { $match: { cartItems: { $exists: true, $ne: [] } } },
     { $unwind: "$cartItems" },
 
-    // convert price/qty to number
+    //  Normalize numeric
     {
       $addFields: {
         qty: { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } },
         price: { $toDouble: { $ifNull: ["$cartItems.price", 0] } },
+      },
+    },
 
-        // ✅ normalize userId
+    //  Normalize userId
+    {
+      $addFields: {
         normalizedUserId: {
           $cond: {
             if: { $eq: [{ $type: "$userId" }, "objectId"] },
@@ -227,15 +231,15 @@ try {
               $cond: {
                 if: { $eq: [{ $type: "$userId" }, "string"] },
                 then: { $toObjectId: "$userId" },
-                else: null
-              }
-            }
-          }
+                else: null,
+              },
+            },
+          },
         },
       },
     },
 
-    // join product
+    //  Lookup product
     {
       $lookup: {
         from: "products",
@@ -246,30 +250,41 @@ try {
     },
     { $unwind: "$product" },
 
-    // group product summary
+    //  Group product summary
     {
       $group: {
         _id: "$product._id",
         title: { $first: "$product.title" },
         image: { $first: { $arrayElemAt: ["$product.images", 0] } },
+
         totalQty: { $sum: "$qty" },
         revenue: { $sum: { $multiply: ["$qty", "$price"] } },
-        uniqueUsers: { $addToSet: "$normalizedUserId" },
+
+        users: { $addToSet: "$normalizedUserId" },
       },
     },
 
-    // ✅ number of unique buyers
+    //  Remove nulls
     {
-      $addFields: {
-        userCount: {
-          $size: {
-            $setDifference: ["$uniqueUsers", [null]],
-          },
+      $project: {
+        title: 1,
+        image: 1,
+        totalQty: 1,
+        revenue: 1,
+        users: {
+          $setDifference: ["$users", [null]],
         },
       },
     },
 
-    // sort by unique users → qty → revenue
+    //  Count buyers
+    {
+      $addFields: {
+        userCount: { $size: "$users" },
+      },
+    },
+
+    //  Sort by Buyers → Qty → Revenue
     {
       $sort: {
         userCount: -1,
@@ -286,7 +301,6 @@ try {
   console.log("⚠ topProducts error →", e.message);
   finalStats.topProducts = [];
 }
-
 
     //------------------------------------------------
     // 6) Top Customers (lifetime)
