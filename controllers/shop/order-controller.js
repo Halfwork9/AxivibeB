@@ -195,50 +195,91 @@ export const stripeWebhook = async (req, res) => {
 };
 
 //  NEW: Fallback function to verify payment from the success page
+//  Verify Stripe Payment Immediately
 export const verifyStripePayment = async (req, res) => {
-  const { orderId } = req.body;
-
-  if (!orderId) {
-    return res.status(400).json({ success: false, message: "Order ID is required." });
-  }
-
   try {
-    const order = await Order.findById(orderId);
+    const { orderId, session_id } = req.body;
+
+    if (!orderId) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Order ID is required" });
+    }
+
+    let order = await Order.findById(orderId);
 
     if (!order) {
-      return res.status(404).json({ success: false, message: "Order not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "Order not found" });
     }
 
-    // If order is already paid, no need to verify again
-    if (order.paymentStatus === 'paid') {
-      return res.json({ success: true, data: order, message: "Order already paid." });
+    //  Already Verified → return
+    if (order.paymentStatus === "paid") {
+      return res.json({
+        success: true,
+        data: order,
+        message: "Already verified",
+      });
     }
 
-    // This verification should only apply to Stripe orders
-    if (order.paymentMethod !== 'stripe' || !order.paymentId) {
-      return res.status(400).json({ success: false, message: "This is not a valid Stripe order for verification." });
+    if (order.paymentMethod !== "stripe") {
+      return res.json({
+        success: true,
+        data: order,
+        message: "Not a Stripe order",
+      });
     }
 
-    // Retrieve the session from Stripe to confirm payment status
-    const session = await stripe.checkout.sessions.retrieve(order.paymentId);
+    // Get stored or received session_id
+    const stripeSessionId = session_id || order.paymentId;
+    if (!stripeSessionId) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing Stripe Session ID",
+      });
+    }
 
-    if (session.payment_status === 'paid') {
-      // Update the order in the database
-      order.paymentStatus = 'paid';
-      order.orderStatus = 'confirmed'; // or 'processing'
+    const session = await stripe.checkout.sessions.retrieve(stripeSessionId);
+
+    if (session.payment_status === "paid") {
+      order.paymentStatus = "paid";
+      order.orderStatus = "confirmed";
+      order.paymentId = stripeSessionId;
       order.orderUpdateDate = new Date();
+
+      //  Decrease stock
+      for (const item of order.cartItems) {
+        await Product.findByIdAndUpdate(item.productId, {
+          $inc: { totalStock: -item.quantity },
+        });
+      }
+
+      //  Delete cart
+      await Cart.findByIdAndDelete(order.cartId);
+
       await order.save();
 
-      console.log(` Order ${orderId} verified and updated via success page fallback.`);
-      return res.json({ success: true, data: order, message: "Payment verified successfully." });
-    } else {
-      return res.status(400).json({ success: false, message: "Payment has not been completed yet." });
+      return res.json({
+        success: true,
+        data: order,
+        message: "Payment verified",
+      });
     }
+
+    return res.json({
+      success: false,
+      message: "Not paid yet",
+      data: order,
+    });
   } catch (error) {
-    console.error("Error during payment verification:", error);
-    res.status(500).json({ success: false, message: "Payment verification failed." });
+    console.error("verifyStripePayment ERROR:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Stripe verification failed" });
   }
 };
+
 
 //  Get orders for a user
 export const getAllOrdersByUser = async (req, res) => {
