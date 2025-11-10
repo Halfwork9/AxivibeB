@@ -128,20 +128,31 @@ export const getOrderStats = async (req, res) => {
     } catch (e) {
       console.log("⚠ Revenue calc error →", e.message);
     }
- //------------------------------------------------
-    // ✅ Determine Best Brand
-    //------------------------------------------------
-    try {
-      const bestBrand = finalStats.brandSalesPerformance?.[0];
-      finalStats.bestSellingBrand = bestBrand?.brand || null;
-    } catch {}
+//------------------------------------------------
+// ✅ Determine Best Brand
+//------------------------------------------------
+try {
+  const bestBrand = Array.isArray(finalStats.brandSalesPerformance)
+    ? finalStats.brandSalesPerformance[0]
+    : null;
 
-    //------------------------------------------------
-    // ✅ Determine Best Category
-    //------------------------------------------------
-    try {
-      finalStats.bestSellingCategory = finalStats.categorySales?.[0]?.name || null;
-    } catch {}
+  finalStats.bestSellingBrand = bestBrand?.brand ?? null;
+} catch {
+  finalStats.bestSellingBrand = null;
+}
+
+//------------------------------------------------
+// ✅ Determine Best Category
+//------------------------------------------------
+try {
+  const bestCategory = Array.isArray(finalStats.categorySales)
+    ? finalStats.categorySales[0]
+    : null;
+
+  finalStats.bestSellingCategory = bestCategory?.name ?? null;
+} catch {
+  finalStats.bestSellingCategory = null;
+}
 
     //------------------------------------------------
     // 2) Low stock
