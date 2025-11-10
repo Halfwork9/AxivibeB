@@ -207,97 +207,69 @@ try {
     } catch {}
  //------------------------------------------------
 
-//  Top Products — sorted by buyer count → quantity
+//------------------------------------------------
+//  Top Products By Unique Buyers
+//------------------------------------------------
 try {
   const topProductsAgg = await Order.aggregate([
-    { $match: { cartItems: { $exists: true, $ne: [] } } },
-    { $unwind: "$cartItems" },
+    { $match: { [itemField]: { $exists: true, $ne: [] } } },
+    { $unwind: `$${itemField}` },
 
-    //  Normalize numbers
+    // Normalize quantities + price
     {
       $addFields: {
-        qty: { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } },
-      },
+        qty: { $toDouble: { $ifNull: [`$${itemField}.quantity`, 0] } },
+        price: { $toDouble: { $ifNull: [`$${itemField}.price`, 0] } },
+      }
     },
 
-    //  Normalize userId to objectId
-    {
-      $addFields: {
-        normalizedUserId: {
-          $switch: {
-            branches: [
-              {
-                case: { $eq: [{ $type: "$userId" }, "objectId"] },
-                then: "$userId",
-              },
-              {
-                case: { $eq: [{ $type: "$userId" }, "string"] },
-                then: { $toObjectId: "$userId" },
-              },
-            ],
-            default: null,
-          },
-        },
-      },
-    },
-
-    //  Attach product details
+    // Attach product
     {
       $lookup: {
         from: "products",
-        localField: "cartItems.productId",
+        localField: `${itemField}.productId`,
         foreignField: "_id",
         as: "product",
-      },
+      }
     },
     { $unwind: "$product" },
 
-    //  Group by product
+    // ✅ Group by product
     {
       $group: {
         _id: "$product._id",
         title: { $first: "$product.title" },
         image: { $first: { $arrayElemAt: ["$product.images", 0] } },
-        totalQty: { $sum: "$qty" },
-        users: { $addToSet: "$normalizedUserId" },
-      },
+
+        buyers: { $addToSet: "$userId" },         // ✅ Unique customers
+        totalQty: { $sum: "$qty" },                // ✅ Qty sold
+        revenue: { $sum: { $multiply: ["$qty", "$price"] } },
+      }
     },
 
-    //  Remove null users
-    {
-      $project: {
-        title: 1,
-        image: 1,
-        totalQty: 1,
-        users: {
-          $setDifference: ["$users", [null]],
-        },
-      },
-    },
-
-    //  Count unique buyers
+    // ✅ Add buyer count
     {
       $addFields: {
-        buyers: { $size: "$users" },
-      },
+        buyerCount: { $size: "$buyers" }
+      }
     },
 
-    //  Sort: Most buyers → most qty
-    {
-      $sort: {
-        buyers: -1,
-        totalQty: -1,
-      },
-    },
-
+    { $sort: { buyerCount: -1, totalQty: -1 } },
     { $limit: 10 },
   ]);
 
-  finalStats.topProducts = topProductsAgg;
-} catch (e) {
-  console.log("⚠ topProducts error →", e.message);
+  finalStats.topProducts = topProductsAgg.map(p => ({
+    _id: p._id,
+    title: p.title,
+    image: p.image,
+    totalQty: p.totalQty,
+    buyers: p.buyerCount ?? 0,
+  }));
+} catch (err) {
+  console.log("⚠ topProducts error →", err.message);
   finalStats.topProducts = [];
 }
+
 
     //------------------------------------------------
     // 6) Top Customers (lifetime)
