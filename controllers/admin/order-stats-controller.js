@@ -347,31 +347,6 @@ try {
   finalStats.brandSalesPerformance = [];
 }
 
-//------------------------------------------------
-// ✅ Determine Best Brand
-//------------------------------------------------
-try {
-  if (finalStats.brandSalesPerformance?.length > 0) {
-    finalStats.bestSellingBrand = finalStats.brandSalesPerformance[0].brand;
-  } else {
-    finalStats.bestSellingBrand = null;
-  }
-} catch {
-  finalStats.bestSellingBrand = null;
-}
-
-//------------------------------------------------
-// ✅ Determine Best Category
-//------------------------------------------------
-try {
-  if (finalStats.categorySales?.length > 0) {
-    finalStats.bestSellingCategory = finalStats.categorySales[0].name;
-  } else {
-    finalStats.bestSellingCategory = null;
-  }
-} catch {
-  finalStats.bestSellingCategory = null;
-}
 
     //------------------------------------------------
     // 8) Payment Method Distribution (lifetime)
@@ -437,6 +412,32 @@ try {
         value: c?.revenue || 0,
       }));
     } catch {}
+
+    //------------------------------------------------
+// ✅ Determine Best Brand
+//------------------------------------------------
+try {
+  if (finalStats.brandSalesPerformance?.length > 0) {
+    finalStats.bestSellingBrand = finalStats.brandSalesPerformance[0].brand;
+  } else {
+    finalStats.bestSellingBrand = null;
+  }
+} catch {
+  finalStats.bestSellingBrand = null;
+}
+
+//------------------------------------------------
+// ✅ Determine Best Category
+//------------------------------------------------
+try {
+  if (finalStats.categorySales?.length > 0) {
+    finalStats.bestSellingCategory = finalStats.categorySales[0].name;
+  } else {
+    finalStats.bestSellingCategory = null;
+  }
+} catch {
+  finalStats.bestSellingCategory = null;
+}
 
     //------------------------------------------------
     // DONE
