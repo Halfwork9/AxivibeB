@@ -208,14 +208,14 @@ try {
  //------------------------------------------------
 
 //------------------------------------------------
-//  Top Products By Unique Buyers
+// ✅ Top Products By Unique Buyers + Qty
 //------------------------------------------------
 try {
   const topProductsAgg = await Order.aggregate([
     { $match: { [itemField]: { $exists: true, $ne: [] } } },
     { $unwind: `$${itemField}` },
 
-    // Normalize quantities + price
+    // Normalize qty + price
     {
       $addFields: {
         qty: { $toDouble: { $ifNull: [`$${itemField}.quantity`, 0] } },
@@ -223,7 +223,7 @@ try {
       }
     },
 
-    // Attach product
+    // Join product
     {
       $lookup: {
         from: "products",
@@ -234,27 +234,29 @@ try {
     },
     { $unwind: "$product" },
 
-    // ✅ Group by product
+    // ✅ Group data
     {
       $group: {
         _id: "$product._id",
         title: { $first: "$product.title" },
         image: { $first: { $arrayElemAt: ["$product.images", 0] } },
 
-        buyers: { $addToSet: "$userId" },         // ✅ Unique customers
-        totalQty: { $sum: "$qty" },                // ✅ Qty sold
-        revenue: { $sum: { $multiply: ["$qty", "$price"] } },
+        qty: { $sum: "$qty" },                     // Total quantity sold
+        buyers: { $addToSet: "$userId" },          // Unique customers
       }
     },
 
-    // ✅ Add buyer count
+    // ✅ Count unique buyers
     {
       $addFields: {
         buyerCount: { $size: "$buyers" }
       }
     },
 
-    { $sort: { buyerCount: -1, totalQty: -1 } },
+    // ✅ Sort by most buyers → then qty
+    { $sort: { buyerCount: -1, qty: -1 } },
+
+    // ✅ Limit to 10
     { $limit: 10 },
   ]);
 
@@ -262,14 +264,13 @@ try {
     _id: p._id,
     title: p.title,
     image: p.image,
-    totalQty: p.totalQty,
     buyers: p.buyerCount ?? 0,
+    totalQty: p.qty ?? 0,
   }));
 } catch (err) {
   console.log("⚠ topProducts error →", err.message);
   finalStats.topProducts = [];
 }
-
 
     //------------------------------------------------
     // 6) Top Customers (lifetime)
