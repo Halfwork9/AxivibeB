@@ -50,6 +50,12 @@ export const getOrderStats = async (req, res) => {
       // Legacy charts people still like
       topProducts: [],                 // [{ _id, title, image, totalQty, revenue }]
       categorySales: [],               // [{ name, value }]
+
+      todayRevenue: 0,
+      weeklyRevenue: 0,
+      monthlyRevenue: 0,
+      bestSellingBrand: null,
+      bestSellingCategory: null,
     };
 
     // Detect items field
@@ -80,6 +86,62 @@ export const getOrderStats = async (req, res) => {
     finalStats.confirmedOrders = confirmedOrders;
     finalStats.shippedOrders = shippedOrders;
     finalStats.totalCustomers = uniqueCustomers.length;
+
+     //------------------------------------------------
+    // ✅ 2) Daily / Weekly / Monthly Revenue
+    //------------------------------------------------
+    try {
+      const now = new Date();
+
+      // Today
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      // Last 7 days
+      const weekStart = new Date();
+      weekStart.setDate(weekStart.getDate() - 7);
+
+      // Month start
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      const revAgg = await Order.aggregate([
+        {
+          $facet: {
+            today: [
+              { $match: { orderDate: { $gte: todayStart } } },
+              { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+            ],
+            weekly: [
+              { $match: { orderDate: { $gte: weekStart } } },
+              { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+            ],
+            monthly: [
+              { $match: { orderDate: { $gte: monthStart } } },
+              { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+            ],
+          },
+        },
+      ]);
+
+      finalStats.todayRevenue = revAgg[0]?.today[0]?.total ?? 0;
+      finalStats.weeklyRevenue = revAgg[0]?.weekly[0]?.total ?? 0;
+      finalStats.monthlyRevenue = revAgg[0]?.monthly[0]?.total ?? 0;
+    } catch (e) {
+      console.log("⚠ Revenue calc error →", e.message);
+    }
+ //------------------------------------------------
+    // ✅ Determine Best Brand
+    //------------------------------------------------
+    try {
+      const bestBrand = finalStats.brandSalesPerformance?.[0];
+      finalStats.bestSellingBrand = bestBrand?.brand || null;
+    } catch {}
+
+    //------------------------------------------------
+    // ✅ Determine Best Category
+    //------------------------------------------------
+    try {
+      finalStats.bestSellingCategory = finalStats.categorySales?.[0]?.name || null;
+    } catch {}
 
     //------------------------------------------------
     // 2) Low stock
