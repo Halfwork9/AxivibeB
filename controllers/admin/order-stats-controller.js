@@ -206,6 +206,68 @@ try {
         totalOrders > 0 ? Number(((returned / totalOrders) * 100).toFixed(2)) : 0;
     } catch {}
 
+    // ✅ Top products — ranked by most unique users
+try {
+  const topProductsAgg = await Order.aggregate([
+    { $match: { cartItems: { $exists: true, $ne: [] } } },
+    { $unwind: "$cartItems" },
+
+    // Convert numbers
+    {
+      $addFields: {
+        _qty: { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } },
+        _price: { $toDouble: { $ifNull: ["$cartItems.price", 0] } },
+      },
+    },
+
+    // Join product
+    {
+      $lookup: {
+        from: "products",
+        localField: "cartItems.productId",
+        foreignField: "_id",
+        as: "product",
+      },
+    },
+    { $unwind: "$product" },
+
+    // ✅ Track unique userIds per product
+    {
+      $group: {
+        _id: "$product._id",
+        title: { $first: "$product.title" },
+        image: { $first: { $arrayElemAt: ["$product.images", 0] } },
+        totalQty: { $sum: "$_qty" },
+        revenue: { $sum: { $multiply: ["$_qty", "$_price"] } },
+        uniqueUsers: { $addToSet: "$userId" }, // <-- key
+      },
+    },
+
+    // ✅ Count unique users
+    {
+      $addFields: {
+        userCount: { $size: "$uniqueUsers" },
+      },
+    },
+
+    // ✅ Sort by distinct users → qty → revenue
+    {
+      $sort: {
+        userCount: -1,
+        totalQty: -1,
+        revenue: -1,
+      },
+    },
+
+    { $limit: 10 },
+  ]);
+
+  finalStats.topProducts = topProductsAgg;
+} catch (e) {
+  console.log("⚠ topProducts error →", e.message);
+  finalStats.topProducts = [];
+}
+
     //------------------------------------------------
     // 6) Top Customers (lifetime)
     //------------------------------------------------
