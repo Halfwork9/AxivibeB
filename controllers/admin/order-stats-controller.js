@@ -206,40 +206,42 @@ try {
         totalOrders > 0 ? Number(((returned / totalOrders) * 100).toFixed(2)) : 0;
     } catch {}
  //------------------------------------------------
-   //  Top products — ranked by most unique users
+
+//  Top Products — sorted by buyer count → quantity
 try {
   const topProductsAgg = await Order.aggregate([
     { $match: { cartItems: { $exists: true, $ne: [] } } },
     { $unwind: "$cartItems" },
 
-    //  Normalize numeric
+    //  Normalize numbers
     {
       $addFields: {
         qty: { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } },
-        price: { $toDouble: { $ifNull: ["$cartItems.price", 0] } },
       },
     },
 
-    //  Normalize userId
+    //  Normalize userId to objectId
     {
       $addFields: {
         normalizedUserId: {
-          $cond: {
-            if: { $eq: [{ $type: "$userId" }, "objectId"] },
-            then: "$userId",
-            else: {
-              $cond: {
-                if: { $eq: [{ $type: "$userId" }, "string"] },
-                then: { $toObjectId: "$userId" },
-                else: null,
+          $switch: {
+            branches: [
+              {
+                case: { $eq: [{ $type: "$userId" }, "objectId"] },
+                then: "$userId",
               },
-            },
+              {
+                case: { $eq: [{ $type: "$userId" }, "string"] },
+                then: { $toObjectId: "$userId" },
+              },
+            ],
+            default: null,
           },
         },
       },
     },
 
-    //  Lookup product
+    //  Attach product details
     {
       $lookup: {
         from: "products",
@@ -250,46 +252,41 @@ try {
     },
     { $unwind: "$product" },
 
-    //  Group product summary
+    //  Group by product
     {
       $group: {
         _id: "$product._id",
         title: { $first: "$product.title" },
         image: { $first: { $arrayElemAt: ["$product.images", 0] } },
-
         totalQty: { $sum: "$qty" },
-        revenue: { $sum: { $multiply: ["$qty", "$price"] } },
-
         users: { $addToSet: "$normalizedUserId" },
       },
     },
 
-    //  Remove nulls
+    //  Remove null users
     {
       $project: {
         title: 1,
         image: 1,
         totalQty: 1,
-        revenue: 1,
         users: {
           $setDifference: ["$users", [null]],
         },
       },
     },
 
-    //  Count buyers
+    //  Count unique buyers
     {
       $addFields: {
-        userCount: { $size: "$users" },
+        buyers: { $size: "$users" },
       },
     },
 
-    //  Sort by Buyers → Qty → Revenue
+    //  Sort: Most buyers → most qty
     {
       $sort: {
-        userCount: -1,
+        buyers: -1,
         totalQty: -1,
-        revenue: -1,
       },
     },
 
