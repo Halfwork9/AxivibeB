@@ -490,6 +490,7 @@ try {
 //------------------------------------------------
 export const getSalesOverview = async (req, res) => {
   try {
+    const now = new Date();
     const last30Days = new Date();
     last30Days.setDate(last30Days.getDate() - 30);
 
@@ -516,11 +517,36 @@ export const getSalesOverview = async (req, res) => {
       { $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 } },
     ]);
 
-    const formatted = raw.map((d) => ({
-      date: `${d._id.day}/${d._id.month}`,
-      revenue: d.revenue,
-      orders: d.orders,
-    }));
+    //------------------------------------------------
+    // ✅ FIX — Create full 30-day timeline
+    //------------------------------------------------
+    const map = {};
+
+    raw.forEach((d) => {
+      const dateStr = `${d._id.day}/${d._id.month}`;
+      map[dateStr] = {
+        date: dateStr,
+        revenue: d.revenue,
+        orders: d.orders,
+      };
+    });
+
+    const formatted = [];
+    const temp = new Date(last30Days);
+
+    for (let i = 0; i < 30; i++) {
+      const dateStr = `${temp.getDate()}/${temp.getMonth() + 1}`;
+
+      formatted.push(
+        map[dateStr] || {
+          date: dateStr,
+          revenue: 0,
+          orders: 0,
+        }
+      );
+
+      temp.setDate(temp.getDate() + 1);
+    }
 
     return res.json({ success: true, data: formatted });
   } catch (error) {
@@ -530,3 +556,4 @@ export const getSalesOverview = async (req, res) => {
       .json({ success: false, message: "Failed to fetch sales overview" });
   }
 };
+
