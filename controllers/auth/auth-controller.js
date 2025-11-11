@@ -4,8 +4,8 @@ import crypto from "crypto";
 import User from "../../models/User.js";
 import { OAuth2Client } from "google-auth-library";
 import sgMail from "../../config/sendgrid.js"; // Adjust path as needed
-import { sendEmail } from "../../utils/sendEmail.js";
-import { welcomeTemplate } from "../../templates/welcomeTemplate.js";
+import { sendEmail } from "../../src/utils/sendEmail.js";
+import { welcomeTemplate } from "../../src/templates/welcomeTemplate.js";
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
