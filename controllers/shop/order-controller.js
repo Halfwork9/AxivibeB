@@ -164,7 +164,9 @@ export const stripeWebhook = async (req, res) => {
     console.error("Webhook signature failed:", err.message);
     return res.sendStatus(400);
   }
-
+  
+ console.log("🔥 Stripe webhook hit:", event.type);
+  
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
     const orderId = session.metadata.orderId;
