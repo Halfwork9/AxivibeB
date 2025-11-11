@@ -1,5 +1,5 @@
 // src/utils/sendEmail.js
-import sgMail from "@sendgrid/mail";
+import sgMail from "../config/sendgrid.js";
 import dotenv from "dotenv";
 
 dotenv.config();
