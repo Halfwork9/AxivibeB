@@ -1,4 +1,4 @@
-// ✅ controllers/shop/order-controller.js
+//  controllers/shop/order-controller.js
 import Stripe from "stripe";
 import Order from "../../models/Order.js";
 import Cart from "../../models/Cart.js";
@@ -24,7 +24,7 @@ export const createOrder = async (req, res) => {
 
     const user = await User.findById(userId).select("userName email");
 
-    // ✅ Inject brandId + categoryId inside each cartItem
+    //  Inject brandId + categoryId inside each cartItem
     for (let item of cartItems) {
       const product = await Product.findById(item.productId).select(
         "brandId categoryId"
@@ -33,7 +33,7 @@ export const createOrder = async (req, res) => {
       item.categoryId = product?.categoryId ?? null;
     }
 
-    // ✅ COD ORDER
+    //  COD ORDER
     if (paymentMethod === "cod") {
       const newOrder = new Order({
         userId,
@@ -50,7 +50,7 @@ export const createOrder = async (req, res) => {
         orderUpdateDate: new Date(),
       });
 
-      // ✅ Decrease stock
+      //  Decrease stock
       for (let item of cartItems) {
         await Product.findByIdAndUpdate(item.productId, {
           $inc: { totalStock: -item.quantity },
@@ -60,10 +60,10 @@ export const createOrder = async (req, res) => {
       await Cart.findByIdAndDelete(cartId);
       const savedOrder = await newOrder.save();
 
-      // ✅ Email Customer
+      //  Email Customer
       sendEmail({
       to: user.email,
-      subject: "✅ Order Placed Successfully",
+      subject: "Order Placed Successfully",
       html: orderPlacedTemplate(user.userName, savedOrder),
       });
 
@@ -75,7 +75,7 @@ export const createOrder = async (req, res) => {
       });
     }
 
-    // ✅ STRIPE ORDER
+    //  STRIPE ORDER
     if (paymentMethod === "stripe") {
       const newOrder = new Order({
         userId,
@@ -85,7 +85,7 @@ export const createOrder = async (req, res) => {
         cartItems,
         addressInfo,
 
-        // ✅ TEMP CONFIRM immediately
+        //  TEMP CONFIRM immediately
         orderStatus: "confirmed",
         paymentMethod: "stripe",
         paymentStatus: "pending",
@@ -99,7 +99,7 @@ export const createOrder = async (req, res) => {
 
       sendEmail({
       to: order.userEmail,
-      subject: "✅ Payment Successful — Order Confirmed!",
+      subject: "Payment Successful — Order Confirmed!",
       html: orderPlacedTemplate(order.userName, order),
       });
 
@@ -119,7 +119,7 @@ export const createOrder = async (req, res) => {
           quantity: item.quantity,
         })),
 
-        // ✅ Must include session_id
+        //  Must include session_id
         success_url: `https://nikhilmamdekar.site/shop/payment-success?orderId=${newOrder._id}&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `https://nikhilmamdekar.site/shop/payment-cancel`,
 
