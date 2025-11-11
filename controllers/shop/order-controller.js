@@ -4,6 +4,8 @@ import Order from "../../models/Order.js";
 import Cart from "../../models/Cart.js";
 import Product from "../../models/Product.js";
 import User from "../../models/User.js";
+import { sendEmail } from "../../utils/sendEmail.js";
+import { orderPlacedTemplate } from "../../templates/orderPlacedTemplate.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: "2025-01-27.acacia",
@@ -58,6 +60,14 @@ export const createOrder = async (req, res) => {
       await Cart.findByIdAndDelete(cartId);
       const savedOrder = await newOrder.save();
 
+      // ✅ Email Customer
+      sendEmail({
+      to: user.email,
+      subject: "✅ Order Placed Successfully",
+      html: orderPlacedTemplate(user.userName, savedOrder),
+      });
+
+
       return res.status(201).json({
         success: true,
         message: "Order placed successfully!",
@@ -86,6 +96,13 @@ export const createOrder = async (req, res) => {
       });
 
       await newOrder.save();
+
+      sendEmail({
+      to: order.userEmail,
+      subject: "✅ Payment Successful — Order Confirmed!",
+      html: orderPlacedTemplate(order.userName, order),
+      });
+
 
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
