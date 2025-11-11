@@ -186,34 +186,62 @@ export const forgotPassword = async (req, res) => {
       </div>
     `;
     const msg = {
-      to: user.email,
-      from: {
-        name: "Axivibe Support",
-        email: process.env.EMAIL_USER || "halfworks9@gmail.com",
-      },
-      subject: "Reset Your Axivibe Password",
-      text: `Hi ${user.userName || "there"},\n\nWe received a request to reset your password. Click this link to set a new password (valid for 1 hour):\n${resetUrl}\n\nIf you didn’t request this, you can ignore this email.\n\nAxivibe\n123 Example Street, City, State, ZIP, Country\nContact: support@nikhilmamdekar.site`,
-      html: `
-        <div style="font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; border-radius: 8px;">
-          <h2 style="color:#2c3e50;">Password Reset Request</h2>
-          <p style="font-size:15px; color:#555;">
-            Hi ${user.userName || "there"}, we received a request to reset your password.
-          </p>
-          <p>
-            Click below to set a new password. This link is valid for <strong>1 hour</strong>.
-          </p>
-          <a href="${resetUrl}"
-             style="background-color:#1e90ff; color:#fff; padding:10px 20px;
-                    border-radius:5px; text-decoration:none; display:inline-block; margin-top:10px;">
-            Reset Password
-          </a>
-          <p style="font-size:13px; color:#777; margin-top:20px;">
-            If you didn’t request this, you can safely ignore this email.
-          </p>
-          ${footer}
+  to: user.email,
+  from: {
+    name: "Axivibe Support",
+    email: process.env.EMAIL_USER || "support@nikhilmamdekar.site",
+  },
+  subject: "Reset Your Axivibe Password",
+  text: `Hi ${user.userName || "there"},\n\nWe received a request to reset your password. Click here to set a new password (valid for 1 hour):\n${resetUrl}\n\nIf you didn’t request this, you can ignore this message.\n\nTeam Axivibe`,
+  html: `
+    <div style="font-family:'Segoe UI',Roboto,Arial,sans-serif; padding:24px; background:#f7f7f7;">
+      <div style="max-width:600px; margin:auto; background:white; border:1px solid #e5e5e5; border-radius:8px; overflow:hidden;">
+        
+        <!-- HEADER -->
+        <div style="background:#111827; padding:18px 24px;">
+          <h2 style="color:#fff; margin:0; font-size:20px; font-weight:600;">Password Reset Request</h2>
         </div>
-      `,
-    };
+
+        <!-- BODY -->
+        <div style="padding:24px; font-size:15px; color:#333; line-height:1.6;">
+          <p>Hello <strong>${user.userName || "User"}</strong>,</p>
+
+          <p>
+            We received a request to reset the password associated with your Axivibe account.  
+            Please click the button below to create a new password.  
+            This link will remain valid for <strong>1 hour</strong>.
+          </p>
+
+          <div style="text-align:center; margin:30px 0;">
+            <a href="${resetUrl}" 
+              style="background:#2563eb; color:#fff; text-decoration:none; padding:12px 24px; 
+                     border-radius:6px; font-weight:500; display:inline-block;">
+              Reset Password
+            </a>
+          </div>
+
+          <p>
+            If you did not request a password reset, no action is required.  
+            Your account remains secure.
+          </p>
+
+          <p style="margin-top:30px; font-size:13px; color:#666;">
+            For security purposes, do not share this email or your password with anyone.
+          </p>
+
+          <p style="margin-top:24px;">Regards,<br><strong>Axivibe Support Team</strong></p>
+        </div>
+
+        <!-- FOOTER -->
+        <div style="background:#f3f4f6; padding:16px 24px; text-align:center; font-size:12px; color:#777;">
+          © ${new Date().getFullYear()} Axivibe. All rights reserved.
+        </div>
+
+      </div>
+    </div>
+  `,
+};
+
     await sgMail.send(msg);
     res.status(200).json({ success: true, message: "Reset email sent successfully. Please check your inbox or spam/junk folder." });
   } catch (error) {
