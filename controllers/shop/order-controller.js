@@ -6,8 +6,9 @@ import Product from "../../models/Product.js";
 import User from "../../models/User.js";
 
 // ✅ Email
-import { sendEmail } from "../src/utils/sendEmail.js";
-import { orderPlacedTemplate } from "../src/templates/orderPlacedTemplate.js";
+// ✅ Email
+import { sendEmail } from "../../src/utils/sendEmail.js";
+import { orderPlacedTemplate } from "../../src/templates/orderPlacedTemplate.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: "2025-01-27.acacia",
