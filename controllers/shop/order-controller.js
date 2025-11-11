@@ -198,6 +198,7 @@ export const stripeWebhook = async (req, res) => {
           to: order.userEmail,
           subject: "Order Confirmed",
           html: orderPlacedTemplate(order.userName, order),
+          console.log("📧 Trying to send email to", order.userEmail);
         });
       } catch (err) {
         console.log("⚠ Email failed:", err.message);
