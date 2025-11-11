@@ -352,19 +352,41 @@ try {
     // 8) Payment Method Distribution (lifetime)
     //------------------------------------------------
     try {
-      const paymentDist = await Order.aggregate([
-        {
-          $group: {
-            _id: "$paymentMethod",
-            count: { $sum: 1 },
-          },
-        },
-      ]);
-      finalStats.paymentMethodBreakdown = paymentDist.map((p) => ({
-        method: p?._id || "Unknown",
-        count: p?.count || 0,
-      }));
-    } catch {}
+      const paymentDistRaw = await Order.aggregate([
+  {
+    $group: {
+      _id: {
+        $toLower: "$paymentMethod"
+      },
+      count: { $sum: 1 },
+    },
+  },
+]);
+
+// Merge COD + Cash on Delivery
+const normalized = {};
+
+paymentDistRaw.forEach((p) => {
+  let key = p._id;
+
+  if (key.includes("cod") || key.includes("cash")) {
+    key = "Cash on Delivery";
+  } else if (key.includes("stripe")) {
+    key = "Stripe";
+  } else {
+    key = key || "Unknown";
+  }
+
+  normalized[key] = (normalized[key] || 0) + p.count;
+});
+
+finalStats.paymentMethodBreakdown = Object.entries(normalized).map(
+  ([method, count]) => ({
+    method,
+    count,
+  })
+);
+          } catch {}
 
    
     //------------------------------------------------
