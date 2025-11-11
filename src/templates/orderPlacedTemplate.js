@@ -50,7 +50,7 @@ export const orderPlacedTemplate = (name, order) => `
         </table>
 
         <div style="text-align:center; margin-top:32px;">
-          <a href="${process.env.FRONTEND_URL}/shop/orders/${order._id}"
+          <a href="${process.env.FRONTEND_URL}/shop/order/${order._id}"
             style="background:#2563eb; color:#fff; padding:12px 24px; display:inline-block; text-decoration:none; border-radius:6px; font-weight:500;">
             View Order Status
           </a>
