@@ -142,71 +142,77 @@ export const stripeWebhook = async (req, res) => {
       process.env.STRIPE_WEBHOOK_SECRET
     );
   } catch (err) {
-    console.error("⚠️ Webhook signature verification failed:", err.message);
+    console.error("❌ Stripe webhook signature error:", err.message);
     return res.sendStatus(400);
   }
 
-  //  ADD LOG: Log the received event type
-  console.log(`🔔 Webhook received: ${event.type}`);
+  console.log(`✅ Stripe Event Received: ${event.type}`);
 
-  // Handle the event
+  // ✅ Handle only checkout complete
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
-    const orderId = session.metadata.orderId;
+    const orderId = session.metadata?.orderId;
 
-    //  ADD LOG: Log the orderId from the metadata
-    console.log(`🔔 Processing payment for Order ID: ${orderId}`);
+    console.log("🔎 orderId from metadata →", orderId);
+
+    if (!orderId) {
+      console.error("❌ Missing orderId in session metadata.");
+      return res.status(200).json({ received: true });
+    }
 
     try {
       const order = await Order.findById(orderId);
 
-      //  ADD LOG: Check if the order was found
       if (!order) {
-        console.error(`❌ Order not found for ID: ${orderId}`);
-        return res.status(404).json({ error: "Order not found" });
+        console.error("❌ Order not found for:", orderId);
+        return res.status(200).json({ received: true }); // still acknowledge
       }
 
-      //  ADD LOG: Check if the order is already paid to prevent duplicate processing
-      if (order.paymentStatus === 'paid') {
-        console.log(`ℹ️ Order ${orderId} is already marked as paid. Skipping.`);
-        return res.json({ received: true });
+      // ✅ If already marked paid → skip
+      if (order.paymentStatus === "paid") {
+        console.log("ℹ️ Order already paid, skipping");
+        return res.status(200).json({ received: true });
       }
-      
-      // Update the order
+
+      // ✅ Update fields
       order.paymentStatus = "paid";
-      order.orderStatus = "confirmed"; // Or "processing" if you have that state
+      order.orderStatus = "confirmed";
       order.paymentId = session.payment_intent;
       order.orderUpdateDate = new Date();
 
-      // Decrease stock for each product
+      // ✅ Stock decrease
       for (const item of order.cartItems) {
         await Product.findByIdAndUpdate(item.productId, {
           $inc: { totalStock: -item.quantity },
         });
       }
 
-      // Delete cart
+      // ✅ Remove user's cart
       await Cart.findByIdAndDelete(order.cartId);
 
       await order.save();
 
-      //  ADD LOG: Confirm success
-      console.log(`✅ Order ${orderId} payment confirmed and status updated.`);
-      await sendEmail({
-      to: order.userEmail,
-      subject: "Payment Successful — Order Confirmed!",
-      html: orderPlacedTemplate(order.userName, order),
-      });
+      console.log("✅ Payment confirmed. Emailing:", order.userEmail);
 
-      
+      // ✅ Send Email
+      try {
+        await sendEmail({
+          to: order.userEmail,
+          subject: "Order Confirmed — Payment Received",
+          html: orderPlacedTemplate(order.userName, order),
+        });
+      } catch (mailErr) {
+        console.error("⚠️ Email send failed:", mailErr?.message);
+        // DO NOT return error — webhook must always return 200
+      }
+
     } catch (err) {
-      console.error(`❌ Error updating order ${orderId} after payment:`, err);
-      // It's important to still return a 200 to Stripe to avoid retries
-      // but we should log the error for manual intervention.
+      console.error("❌ Stripe webhook DB update failed:", err.message);
+      // still respond 200 so Stripe doesn’t retry endlessly
     }
   }
 
-  // Return a 200 response to acknowledge receipt of the event
+  // ✅ Required: acknowledge to Stripe
   res.json({ received: true });
 };
 
