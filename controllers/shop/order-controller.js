@@ -1,16 +1,23 @@
-//  controllers/shop/order-controller.js
+// ✅ controllers/shop/order-controller.js
 import Stripe from "stripe";
 import Order from "../../models/Order.js";
 import Cart from "../../models/Cart.js";
 import Product from "../../models/Product.js";
 import User from "../../models/User.js";
-import { sendEmail } from "../../src/utils/sendEmail.js";
-import { orderPlacedTemplate } from "../../src/templates/orderPlacedTemplate.js";
+
+// ✅ Email
+import { sendEmail } from "../../utils/sendEmail.js";
+import { orderPlacedTemplate } from "../../templates/orderPlacedTemplate.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: "2025-01-27.acacia",
 });
 
+/**
+ * ✅ CREATE ORDER
+ * COD → Confirm immediately + email customer
+ * Stripe → Create pending order → verify via webhook
+ */
 export const createOrder = async (req, res) => {
   try {
     const {
@@ -24,21 +31,23 @@ export const createOrder = async (req, res) => {
 
     const user = await User.findById(userId).select("userName email");
 
-    //  Inject brandId + categoryId inside each cartItem
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    // ✅ Add brandId + categoryId to cart items
     for (let item of cartItems) {
-      const product = await Product.findById(item.productId).select(
-        "brandId categoryId"
-      );
+      const product = await Product.findById(item.productId).select("brandId categoryId");
       item.brandId = product?.brandId ?? null;
       item.categoryId = product?.categoryId ?? null;
     }
 
-    //  COD ORDER
+    // ✅ CASH ON DELIVERY
     if (paymentMethod === "cod") {
       const newOrder = new Order({
         userId,
-        userName: user?.userName ?? "",
-        userEmail: user?.email ?? "",
+        userName: user?.userName,
+        userEmail: user?.email,
         cartId,
         cartItems,
         addressInfo,
@@ -50,7 +59,7 @@ export const createOrder = async (req, res) => {
         orderUpdateDate: new Date(),
       });
 
-      //  Decrease stock
+      // ✅ Decrease stock
       for (let item of cartItems) {
         await Product.findByIdAndUpdate(item.productId, {
           $inc: { totalStock: -item.quantity },
@@ -60,36 +69,36 @@ export const createOrder = async (req, res) => {
       await Cart.findByIdAndDelete(cartId);
       const savedOrder = await newOrder.save();
 
-      //  Email Customer
-      sendEmail({
-      to: user.email,
-      subject: "Order Placed Successfully",
-      html: orderPlacedTemplate(user.userName, savedOrder),
-      });
-
+      // ✅ Send order email
+      try {
+        await sendEmail({
+          to: user.email,
+          subject: "Order Placed",
+          html: orderPlacedTemplate(user.userName, savedOrder),
+        });
+      } catch (err) {
+        console.log("⚠ Email send failed:", err.message);
+      }
 
       return res.status(201).json({
         success: true,
-        message: "Order placed successfully!",
+        message: "Order placed successfully",
         data: savedOrder,
       });
     }
 
-    //  STRIPE ORDER
+    // ✅ STRIPE
     if (paymentMethod === "stripe") {
       const newOrder = new Order({
         userId,
-        userName: user?.userName ?? "",
-        userEmail: user?.email ?? "",
+        userName: user?.userName,
+        userEmail: user?.email,
         cartId,
         cartItems,
         addressInfo,
-
-        //  TEMP CONFIRM immediately
-        orderStatus: "confirmed",
+        orderStatus: "pending",
         paymentMethod: "stripe",
         paymentStatus: "pending",
-
         totalAmount,
         orderDate: new Date(),
         orderUpdateDate: new Date(),
@@ -97,40 +106,49 @@ export const createOrder = async (req, res) => {
 
       await newOrder.save();
 
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types: ["card"],
-        mode: "payment",
-        line_items: cartItems.map((item) => ({
-          price_data: {
-            currency: "inr",
-            product_data: {
-              name: item.title,
-              images: [item.image],
+      // ✅ Create Stripe Session
+      let session;
+      try {
+        session = await stripe.checkout.sessions.create({
+          payment_method_types: ["card"],
+          mode: "payment",
+
+          line_items: cartItems.map((item) => ({
+            price_data: {
+              currency: "inr",
+              product_data: {
+                name: item.title,
+                images: [item.image],
+              },
+              unit_amount: Math.round(item.price * 100),
             },
-            unit_amount: Math.round(item.price * 100),
-          },
-          quantity: item.quantity,
-        })),
+            quantity: item.quantity,
+          })),
 
-        //  Must include session_id
-        success_url: `https://nikhilmamdekar.site/shop/payment-success?orderId=${newOrder._id}&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `https://nikhilmamdekar.site/shop/payment-cancel`,
+          success_url: `${process.env.FRONTEND_URL}/shop/payment-success?orderId=${newOrder._id}&session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${process.env.FRONTEND_URL}/shop/payment-cancel`,
 
-        metadata: { orderId: newOrder._id.toString() },
-      });
+          metadata: { orderId: newOrder._id.toString() },
+        });
+      } catch (err) {
+        console.log("STRIPE SESSION ERROR:", err);
+        return res.status(500).json({ success: false, message: err.message });
+      }
 
       return res.status(200).json({ success: true, url: session.url });
     }
 
-    return res.status(400).json({ success: false, message: "Invalid payment method." });
+    return res.status(400).json({ success: false, message: "Invalid payment method" });
   } catch (error) {
-    console.error("Error in createOrder:", error);
-    res.status(500).json({ success: false, message: "Error creating order" });
+    console.error("createOrder ERROR:", error);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-
-//  Webhook to confirm payment (No changes needed here)
+/**
+ * ✅ WEBHOOK → Stripe confirms payment
+ * MUST be raw body in server.js
+ */
 export const stripeWebhook = async (req, res) => {
   let event;
 
@@ -142,79 +160,57 @@ export const stripeWebhook = async (req, res) => {
       process.env.STRIPE_WEBHOOK_SECRET
     );
   } catch (err) {
-    console.error("❌ Stripe webhook signature error:", err.message);
+    console.error("Webhook signature failed:", err.message);
     return res.sendStatus(400);
   }
 
-  console.log(`✅ Stripe Event Received: ${event.type}`);
-
-  // ✅ Handle only checkout complete
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
-    const orderId = session.metadata?.orderId;
-
-    console.log("🔎 orderId from metadata →", orderId);
-
-    if (!orderId) {
-      console.error("❌ Missing orderId in session metadata.");
-      return res.status(200).json({ received: true });
-    }
+    const orderId = session.metadata.orderId;
 
     try {
       const order = await Order.findById(orderId);
+      if (!order) return res.status(404).json({ error: "Order not found" });
 
-      if (!order) {
-        console.error("❌ Order not found for:", orderId);
-        return res.status(200).json({ received: true }); // still acknowledge
-      }
-
-      // ✅ If already marked paid → skip
       if (order.paymentStatus === "paid") {
-        console.log("ℹ️ Order already paid, skipping");
-        return res.status(200).json({ received: true });
+        return res.json({ received: true }); // ignore duplicate
       }
 
-      // ✅ Update fields
       order.paymentStatus = "paid";
       order.orderStatus = "confirmed";
       order.paymentId = session.payment_intent;
       order.orderUpdateDate = new Date();
 
-      // ✅ Stock decrease
+      // ✅ Decrease stock
       for (const item of order.cartItems) {
         await Product.findByIdAndUpdate(item.productId, {
           $inc: { totalStock: -item.quantity },
         });
       }
 
-      // ✅ Remove user's cart
       await Cart.findByIdAndDelete(order.cartId);
-
       await order.save();
 
-      console.log("✅ Payment confirmed. Emailing:", order.userEmail);
-
-      // ✅ Send Email
+      // ✅ Send confirmation email
       try {
         await sendEmail({
           to: order.userEmail,
-          subject: "Order Confirmed — Payment Received",
+          subject: "Order Confirmed",
           html: orderPlacedTemplate(order.userName, order),
         });
-      } catch (mailErr) {
-        console.error("⚠️ Email send failed:", mailErr?.message);
-        // DO NOT return error — webhook must always return 200
+      } catch (err) {
+        console.log("⚠ Email failed:", err.message);
       }
 
-    } catch (err) {
-      console.error("❌ Stripe webhook DB update failed:", err.message);
-      // still respond 200 so Stripe doesn’t retry endlessly
+      console.log(`✅ Order ${orderId} confirmed`);
+    } catch (error) {
+      console.error("Webhook handler ERROR:", error);
     }
   }
 
-  // ✅ Required: acknowledge to Stripe
   res.json({ received: true });
 };
+
 
 //  NEW: Fallback function to verify payment from the success page
 //  Verify Stripe Payment Immediately
