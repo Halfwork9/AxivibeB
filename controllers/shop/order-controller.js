@@ -6,7 +6,6 @@ import Product from "../../models/Product.js";
 import User from "../../models/User.js";
 
 // ✅ Email
-// ✅ Email
 import { sendEmail } from "../../src/utils/sendEmail.js";
 import { orderPlacedTemplate } from "../../src/templates/orderPlacedTemplate.js";
 
@@ -250,7 +249,7 @@ export const verifyStripePayment = async (req, res) => {
       });
     }
 
-    // ✅ Use provided session_id, or stored paymentId
+    // ✅ Get stored or received session_id
     const stripeSessionId = session_id || order.paymentId;
     if (!stripeSessionId) {
       return res.status(400).json({
@@ -259,41 +258,16 @@ export const verifyStripePayment = async (req, res) => {
       });
     }
 
-    // ✅ Retrieve session from Stripe
     const session = await stripe.checkout.sessions.retrieve(stripeSessionId);
 
-    // ----------------------------------------
-    // ✅ PAYMENT SUCCESS → UPDATE ORDER + EMAIL
-    // ----------------------------------------
     if (session.payment_status === "paid") {
+      // ✅ Update order only (NO EMAIL, NO STOCK)
       order.paymentStatus = "paid";
       order.orderStatus = "confirmed";
       order.paymentId = stripeSessionId;
       order.orderUpdateDate = new Date();
 
-      // ✅ Decrease stock
-      for (const item of order.cartItems) {
-        await Product.findByIdAndUpdate(item.productId, {
-          $inc: { totalStock: -item.quantity },
-        });
-      }
-
-      // ✅ Delete cart
-      await Cart.findByIdAndDelete(order.cartId);
-
       await order.save();
-
-      // ✅ Email customer (FALLBACK + guaranteed)
-      try {
-        await sendEmail({
-          to: order.userEmail,
-          subject: "Order Confirmed",
-          html: orderPlacedTemplate(order.userName, order),
-        });
-        console.log("✅ Stripe order email sent");
-      } catch (err) {
-        console.log("⚠ Email failed:", err.message);
-      }
 
       return res.json({
         success: true,
@@ -302,9 +276,6 @@ export const verifyStripePayment = async (req, res) => {
       });
     }
 
-    // ----------------------------------------
-    // ❌ PAYMENT NOT YET SUCCESSFUL
-    // ----------------------------------------
     return res.json({
       success: false,
       message: "Not paid yet",
@@ -317,6 +288,7 @@ export const verifyStripePayment = async (req, res) => {
       .json({ success: false, message: "Stripe verification failed" });
   }
 };
+
 
 
 //  Get orders for a user
