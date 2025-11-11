@@ -97,13 +97,6 @@ export const createOrder = async (req, res) => {
 
       await newOrder.save();
 
-      sendEmail({
-      to: order.userEmail,
-      subject: "Payment Successful — Order Confirmed!",
-      html: orderPlacedTemplate(order.userName, order),
-      });
-
-
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         mode: "payment",
@@ -199,6 +192,12 @@ export const stripeWebhook = async (req, res) => {
 
       //  ADD LOG: Confirm success
       console.log(`✅ Order ${orderId} payment confirmed and status updated.`);
+      await sendEmail({
+      to: order.userEmail,
+      subject: "Payment Successful — Order Confirmed!",
+      html: orderPlacedTemplate(order.userName, order),
+      });
+
       
     } catch (err) {
       console.error(`❌ Error updating order ${orderId} after payment:`, err);
