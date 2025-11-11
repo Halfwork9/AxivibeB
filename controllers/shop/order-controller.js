@@ -194,15 +194,14 @@ export const stripeWebhook = async (req, res) => {
 
       // ✅ Send confirmation email
       try {
-        await sendEmail({
-          to: order.userEmail,
-          subject: "Order Confirmed",
-          html: orderPlacedTemplate(order.userName, order),
-          console.log("📧 Trying to send email to", order.userEmail);
-        });
-      } catch (err) {
-        console.log("⚠ Email failed:", err.message);
-      }
+  await sendEmail({
+    to: order.userEmail,
+    subject: "Order Confirmed",
+    html: orderPlacedTemplate(order.userName, order),
+  });
+} catch (err) {
+  console.log("⚠ Email failed:", err.message);
+}
 
       console.log(`✅ Order ${orderId} confirmed`);
     } catch (error) {
