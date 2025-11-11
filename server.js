@@ -93,8 +93,12 @@ app.use(
   })
 );
 
-// --- Stripe Webhook (raw body before express.json) ---
-app.use("/api/shop/order/webhook", bodyParser.raw({ type: "application/json" }));
+// stripe webhook RAW
+app.post(
+  "/api/shop/webhook",
+  bodyParser.raw({ type: "application/json" }),
+  stripeWebhook
+);
 
 // --- Middlewares ---
 app.use(cookieParser());
