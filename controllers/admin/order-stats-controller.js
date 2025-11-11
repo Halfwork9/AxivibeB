@@ -413,31 +413,65 @@ try {
       }));
     } catch {}
 
-    //------------------------------------------------
-// ✅ Determine Best Brand
+//------------------------------------------------
+// ✅ Determine Best Brand + Best Category based on Buyers → Qty
 //------------------------------------------------
 try {
-  if (finalStats.brandSalesPerformance?.length > 0) {
-    finalStats.bestSellingBrand = finalStats.brandSalesPerformance[0].brand;
-  } else {
-    finalStats.bestSellingBrand = null;
+  if (finalStats.topProducts?.length > 0) {
+    const brandMap = {};
+    const categoryMap = {};
+
+    for (const p of finalStats.topProducts) {
+      const product = await Product.findById(p._id)
+        .select("brandId categoryId")
+        .populate("brandId", "name")
+        .populate("categoryId", "name")
+        .lean();
+
+      if (!product) continue;
+
+      const brandName = product.brandId?.name || "Unknown";
+      const categoryName = product.categoryId?.name || "Unknown";
+
+      // BRAND
+      if (!brandMap[brandName]) {
+        brandMap[brandName] = { buyers: 0, qty: 0 };
+      }
+      brandMap[brandName].buyers += p.buyers || 0;
+      brandMap[brandName].qty += p.totalQty || 0;
+
+      // CATEGORY
+      if (!categoryMap[categoryName]) {
+        categoryMap[categoryName] = { buyers: 0, qty: 0 };
+      }
+      categoryMap[categoryName].buyers += p.buyers || 0;
+      categoryMap[categoryName].qty += p.totalQty || 0;
+    }
+
+    // ✅ Sort brand by buyers → qty
+    const sortedBrands = Object.entries(brandMap)
+      .sort((a, b) => {
+        if (b[1].buyers !== a[1].buyers)
+          return b[1].buyers - a[1].buyers;
+        return b[1].qty - a[1].qty;
+      });
+
+    finalStats.bestSellingBrand = sortedBrands[0]?.[0] ?? null;
+
+    // ✅ Sort category by buyers → qty
+    const sortedCategories = Object.entries(categoryMap)
+      .sort((a, b) => {
+        if (b[1].buyers !== a[1].buyers)
+          return b[1].buyers - a[1].buyers;
+        return b[1].qty - a[1].qty;
+      });
+
+    finalStats.bestSellingCategory = sortedCategories[0]?.[0] ?? null;
   }
-} catch {
-  finalStats.bestSellingBrand = null;
+} catch (e) {
+  console.log("⚠ best brand/category calc error →", e.message);
 }
 
-//------------------------------------------------
-// ✅ Determine Best Category
-//------------------------------------------------
-try {
-  if (finalStats.categorySales?.length > 0) {
-    finalStats.bestSellingCategory = finalStats.categorySales[0].name;
-  } else {
-    finalStats.bestSellingCategory = null;
-  }
-} catch {
-  finalStats.bestSellingCategory = null;
-}
 
     //------------------------------------------------
     // DONE
