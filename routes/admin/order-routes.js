@@ -7,7 +7,7 @@ import {
   updatePaymentStatus,
   debugCategoryData,
 } from "../../controllers/admin/order-controller.js";
-
+import { clearDashboardCache } from "../controllers/admin/cache-controller.js";
 import {
   getOrderStats,
   getSalesOverview,
@@ -24,5 +24,6 @@ router.put("/:id/payment-status", updatePaymentStatus);
 // ────── NEW ANALYTICS ROUTES ──────
 router.get("/stats", getOrderStats);
 router.get("/sales-overview", getSalesOverview);
+router.delete("/analytics/cache", clearDashboardCache);
 
 export default router;
