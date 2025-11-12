@@ -4,6 +4,10 @@ const OrderSchema = new mongoose.Schema({
   userId: String,
   userName: { type: String },
   userEmail: { type: String },
+  emailSent: {
+       type: Boolean,
+       default: false,
+     },
 
   cartId: String,
 
