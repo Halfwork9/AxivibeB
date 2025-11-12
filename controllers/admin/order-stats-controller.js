@@ -5,7 +5,6 @@ import Product from "../../models/Product.js";
 import Category from "../../models/Category.js";
 import Brand from "../../models/Brand.js";
 import User from "../../models/User.js";
-import AnalyticsCache from "../../models/AnalyticsCache.js"; // ✅ Mongo cache
 
 //------------------------------------------------
 // Helper: detect the item array field present in orders
@@ -20,43 +19,41 @@ async function detectItemField() {
 }
 
 //------------------------------------------------
-// ✅ GET /admin/orders/stats (Cached & Optimized)
+// GET /admin/orders/stats
 //------------------------------------------------
 export const getOrderStats = async (req, res) => {
   try {
-    const CACHE_KEY = "admin:order_stats";
-    const CACHE_TTL_MS = 10 * 60 * 1000; // 10 min
-
-    // 1️⃣ Try Mongo cache
-    const cache = await AnalyticsCache.findOne({ key: CACHE_KEY });
-    if (cache && Date.now() - cache.updatedAt.getTime() < CACHE_TTL_MS) {
-      console.log("📦 Dashboard stats served from Mongo cache");
-      return res.json({ success: true, data: cache.data });
-    }
-
-    console.log("⚙️ Recomputing dashboard stats...");
     const finalStats = {
+      // Core KPIs
       totalOrders: 0,
       totalRevenue: 0,
       pendingOrders: 0,
       deliveredOrders: 0,
+      totalCustomers: 0,
+      revenueGrowthPercentage: 0, // (left 0 unless you want month-over-month calc)
+
+      // New analytics
+      topCustomers: [],                // [{ userId, name, email, totalSpent, orderCount }]
+      brandSales: [],                  // [{ brand, revenue, qty }]
+      paymentMethodBreakdown: [],      // [{ method, count }]
+      cancelRate: 0,                   // %
+      returnRate: 0,                   // %
+      avgOrderValue: 0,                // number
+      repeatCustomers: 0,
+      repeatCustomerRate: 0,           // %
+
+      // Still useful
+      lowStock: [],                    // [{ _id, title, totalStock }]
       confirmedOrders: 0,
       shippedOrders: 0,
-      totalCustomers: 0,
-      avgOrderValue: 0,
-      repeatCustomers: 0,
-      repeatCustomerRate: 0,
-      cancelRate: 0,
-      returnRate: 0,
+
+      // Legacy charts people still like
+      topProducts: [],                 // [{ _id, title, image, totalQty, revenue }]
+      categorySales: [],               // [{ name, value }]
+
       todayRevenue: 0,
       weeklyRevenue: 0,
       monthlyRevenue: 0,
-      lowStock: [],
-      topProducts: [],
-      topCustomers: [],
-      brandSalesPerformance: [],
-      categorySales: [],
-      paymentMethodBreakdown: [],
       bestSellingBrand: null,
       bestSellingCategory: null,
     };
@@ -65,7 +62,7 @@ export const getOrderStats = async (req, res) => {
     const itemField = await detectItemField();
 
     //------------------------------------------------
-    // 1️⃣ Basic counts
+    // 1) Basic counts
     //------------------------------------------------
     const [
       totalOrders,
@@ -90,14 +87,20 @@ export const getOrderStats = async (req, res) => {
     finalStats.shippedOrders = shippedOrders;
     finalStats.totalCustomers = uniqueCustomers.length;
 
-    //------------------------------------------------
-    // 2️⃣ Daily / Weekly / Monthly Revenue
+     //------------------------------------------------
+    // ✅ 2) Daily / Weekly / Monthly Revenue
     //------------------------------------------------
     try {
       const now = new Date();
+
+      // Today
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      // Last 7 days
       const weekStart = new Date();
       weekStart.setDate(weekStart.getDate() - 7);
+
+      // Month start
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
       const revAgg = await Order.aggregate([
@@ -127,135 +130,155 @@ export const getOrderStats = async (req, res) => {
     }
 
     //------------------------------------------------
-    // 3️⃣ Low stock
-    //------------------------------------------------
-    finalStats.lowStock = await Product.find({ totalStock: { $lt: 10 } })
-      .select("title totalStock")
-      .limit(5)
-      .lean();
-
-    //------------------------------------------------
-    // 4️⃣ Revenue & AOV
-    //------------------------------------------------
-    const revenueAgg = await Order.aggregate([
-      { $group: { _id: null, total: { $sum: "$totalAmount" } } },
-    ]);
-    const revenue = revenueAgg[0]?.total ?? 0;
-    finalStats.totalRevenue = revenue;
-    finalStats.avgOrderValue =
-      totalOrders > 0 ? Number((revenue / totalOrders).toFixed(2)) : 0;
-
-    //------------------------------------------------
-    // 5️⃣ Repeat Customers
-    //------------------------------------------------
-    const customerOrderCount = await Order.aggregate([
-      { $group: { _id: "$userId", count: { $sum: 1 } } },
-    ]);
-    const repeatUsers = customerOrderCount.filter((u) => (u?.count || 0) > 1).length;
-    finalStats.repeatCustomers = repeatUsers;
-    finalStats.repeatCustomerRate =
-      uniqueCustomers.length > 0
-        ? Number(((repeatUsers / uniqueCustomers.length) * 100).toFixed(2))
-        : 0;
-
-    //------------------------------------------------
-    // 6️⃣ Cancellation & Return rates
-    //------------------------------------------------
-    const [cancelled, returned] = await Promise.all([
-      Order.countDocuments({ orderStatus: /cancel/i }),
-      Order.countDocuments({ orderStatus: /return/i }),
-    ]);
-    finalStats.cancelRate =
-      totalOrders > 0 ? Number(((cancelled / totalOrders) * 100).toFixed(2)) : 0;
-    finalStats.returnRate =
-      totalOrders > 0 ? Number(((returned / totalOrders) * 100).toFixed(2)) : 0;
-
-    //------------------------------------------------
-    // 7️⃣ Top Products
+    // 2) Low stock
     //------------------------------------------------
     try {
-      const topProductsAgg = await Order.aggregate([
-        { $match: { [itemField]: { $exists: true, $ne: [] } } },
-        { $unwind: `$${itemField}` },
-        {
-          $addFields: {
-            qty: { $toDouble: { $ifNull: [`$${itemField}.quantity`, 0] } },
-          },
-        },
-        {
-          $lookup: {
-            from: "products",
-            localField: `${itemField}.productId`,
-            foreignField: "_id",
-            as: "product",
-          },
-        },
-        { $unwind: "$product" },
-        {
-          $group: {
-            _id: "$product._id",
-            title: { $first: "$product.title" },
-            image: { $first: { $arrayElemAt: ["$product.images", 0] } },
-            totalQty: { $sum: "$qty" },
-            buyersArr: { $addToSet: "$userId" },
-          },
-        },
-        {
-          $addFields: {
-            buyers: { $size: "$buyersArr" },
-          },
-        },
-        { $sort: { buyers: -1, totalQty: -1 } },
-        { $limit: 10 },
-      ]);
-
-      finalStats.topProducts = topProductsAgg.map((p) => ({
-        _id: p._id,
-        title: p.title,
-        image: p.image,
-        buyers: p.buyers ?? 0,
-        totalQty: p.totalQty ?? 0,
-      }));
-    } catch (err) {
-      console.log("⚠ topProducts error →", err.message);
-    }
+      finalStats.lowStock = await Product.find({ totalStock: { $lt: 10 } })
+        .select("title totalStock")
+        .limit(5)
+        .lean();
+    } catch {}
 
     //------------------------------------------------
-    // 8️⃣ Top Customers
+    // 3) Revenue & AOV (lifetime)
     //------------------------------------------------
     try {
-      const topCustAgg = await Order.aggregate([
-        {
-          $group: {
-            _id: "$userId",
-            totalSpent: { $sum: "$totalAmount" },
-            orderCount: { $sum: 1 },
-          },
-        },
-        { $sort: { totalSpent: -1 } },
-        { $limit: 5 },
+      const revenueAgg = await Order.aggregate([
+        { $group: { _id: null, total: { $sum: "$totalAmount" } } },
       ]);
+      const revenue = revenueAgg[0]?.total ?? 0;
+      finalStats.totalRevenue = revenue;
+      finalStats.avgOrderValue =
+        totalOrders > 0 ? Number((revenue / totalOrders).toFixed(2)) : 0;
+    } catch {}
 
-      const users = await User.find({
-        _id: { $in: topCustAgg.map((c) => c._id) },
-      }).select("userName email");
+    //------------------------------------------------
+    // 4) Repeat Customers
+    //------------------------------------------------
+    try {
+      const customerOrderCount = await Order.aggregate([
+        { $group: { _id: "$userId", count: { $sum: 1 } } },
+      ]);
+      const repeatUsers = customerOrderCount.filter((u) => (u?.count || 0) > 1).length;
+      finalStats.repeatCustomers = repeatUsers;
+      finalStats.repeatCustomerRate =
+        uniqueCustomers.length > 0
+          ? Number(((repeatUsers / uniqueCustomers.length) * 100).toFixed(2))
+          : 0;
+    } catch {}
 
-      const userMap = Object.fromEntries(users.map((u) => [u._id.toString(), u]));
-      finalStats.topCustomers = topCustAgg.map((c) => ({
+    //------------------------------------------------
+    // 5) Cancellation & Return rates
+    //------------------------------------------------
+    try {
+      const [cancelled, returned] = await Promise.all([
+        Order.countDocuments({ orderStatus: /cancel/i }),
+        Order.countDocuments({ orderStatus: /return/i }),
+      ]);
+      finalStats.cancelRate =
+        totalOrders > 0 ? Number(((cancelled / totalOrders) * 100).toFixed(2)) : 0;
+      finalStats.returnRate =
+        totalOrders > 0 ? Number(((returned / totalOrders) * 100).toFixed(2)) : 0;
+    } catch {}
+ //------------------------------------------------
+//------------------------------------------------
+// ✅ Top Products By Unique Buyers + Quantity Sold
+//------------------------------------------------
+try {
+  const topProductsAgg = await Order.aggregate([
+    { $match: { [itemField]: { $exists: true, $ne: [] } } },
+    { $unwind: `$${itemField}` },
+
+    {
+      $addFields: {
+        qty: { $toDouble: { $ifNull: [`$${itemField}.quantity`, 0] } },
+      },
+    },
+
+    // Join product
+    {
+      $lookup: {
+        from: "products",
+        localField: `${itemField}.productId`,
+        foreignField: "_id",
+        as: "product",
+      },
+    },
+    { $unwind: "$product" },
+
+    {
+      $group: {
+        _id: "$product._id",
+        title: { $first: "$product.title" },
+        image: { $first: { $arrayElemAt: ["$product.images", 0] } },
+        totalQty: { $sum: "$qty" },
+        buyersArr: { $addToSet: "$userId" },
+      },
+    },
+
+    {
+      $addFields: {
+        buyers: { $size: "$buyersArr" },
+      },
+    },
+
+    // ✅ Sort primarily by # buyers, then qty
+    { $sort: { buyers: -1, totalQty: -1 } },
+
+    { $limit: 10 },
+  ]);
+
+  finalStats.topProducts = topProductsAgg.map((p) => ({
+    _id: p._id,
+    title: p.title,
+    image: p.image,
+    buyers: p.buyers ?? 0,
+    totalQty: p.totalQty ?? 0,
+  }));
+} catch (error) {
+  console.log("⚠ topProducts error →", error.message);
+  finalStats.topProducts = [];
+}
+
+
+    //------------------------------------------------
+    // 6) Top Customers (lifetime)
+    //------------------------------------------------
+let topCustomers = [];
+try {
+  const topCustAgg = await Order.aggregate([
+    {
+      $group: {
+        _id: "$userId",
+        totalSpent: { $sum: "$totalAmount" },
+        orderCount: { $sum: 1 },
+      },
+    },
+    { $sort: { totalSpent: -1 } },
+    { $limit: 5 },
+  ]);
+
+  topCustomers = await Promise.all(
+    topCustAgg.map(async (c) => {
+      if (!c._id) return null;
+
+      const user = await User.findById(c._id).select("userName email");
+
+      return {
         userId: c._id,
-        name: userMap[c._id]?.userName || "Unknown",
-        email: userMap[c._id]?.email || "",
+        name: user?.userName || "Unknown",
+        email: user?.email || "",
         orderCount: c.orderCount,
         totalSpent: c.totalSpent,
-      }));
-    } catch (err) {
-      console.log("⚠ topCustomers error →", err.message);
-    }
+      };
+    })
+  );
 
-    //------------------------------------------------
-    // 9️⃣ Brand Sales Performance
-    //------------------------------------------------
-   
+  finalStats.topCustomers = topCustomers.filter(Boolean);
+} catch (err) {
+  console.log("⚠ topCustomers error →", err.message);
+}
+// ✅ BRAND SALES PERFORMANCE
 try {
   const brandAgg = await Order.aggregate([
     { $match: { cartItems: { $exists: true, $ne: [] } } },
@@ -324,33 +347,50 @@ try {
   finalStats.brandSalesPerformance = [];
 }
 
+
     //------------------------------------------------
-    // 🔟 Payment Method Breakdown
+    // 8) Payment Method Distribution (lifetime)
     //------------------------------------------------
-    const paymentDistRaw = await Order.aggregate([
-      {
-        $group: {
-          _id: { $toLower: "$paymentMethod" },
-          count: { $sum: 1 },
-        },
+    try {
+      const paymentDistRaw = await Order.aggregate([
+  {
+    $group: {
+      _id: {
+        $toLower: "$paymentMethod"
       },
-    ]);
+      count: { $sum: 1 },
+    },
+  },
+]);
 
-    const normalized = {};
-    paymentDistRaw.forEach((p) => {
-      let key = p._id;
-      if (key.includes("cod") || key.includes("cash")) key = "Cash on Delivery";
-      else if (key.includes("stripe")) key = "Stripe";
-      else key = key || "Unknown";
-      normalized[key] = (normalized[key] || 0) + p.count;
-    });
+// Merge COD + Cash on Delivery
+const normalized = {};
 
-    finalStats.paymentMethodBreakdown = Object.entries(normalized).map(
-      ([method, count]) => ({ method, count })
-    );
- 
+paymentDistRaw.forEach((p) => {
+  let key = p._id;
+
+  if (key.includes("cod") || key.includes("cash")) {
+    key = "Cash on Delivery";
+  } else if (key.includes("stripe")) {
+    key = "Stripe";
+  } else {
+    key = key || "Unknown";
+  }
+
+  normalized[key] = (normalized[key] || 0) + p.count;
+});
+
+finalStats.paymentMethodBreakdown = Object.entries(normalized).map(
+  ([method, count]) => ({
+    method,
+    count,
+  })
+);
+          } catch {}
+
+   
     //------------------------------------------------
-    // 11️⃣ Category Sales (by revenue)
+    // 10) Top Categories by Revenue (lifetime)
     //------------------------------------------------
     try {
       const catAgg = await Order.aggregate([
@@ -389,15 +429,13 @@ try {
         { $sort: { revenue: -1 } },
         { $limit: 5 },
       ]);
-
       finalStats.categorySales = catAgg.map((c) => ({
         name: c?._id || "Unknown",
         value: c?.revenue || 0,
       }));
-    } catch (err) {
-      console.log("⚠ categorySales error →", err.message);
-    }
-   //------------------------------------------------
+    } catch {}
+
+//------------------------------------------------
 // ✅ Determine Best Brand + Best Category based on Buyers → Qty
 //------------------------------------------------
 try {
@@ -455,37 +493,25 @@ try {
 } catch (e) {
   console.log("⚠ best brand/category calc error →", e.message);
 }
-    //------------------------------------------------
-    // ✅ Cache results
-    //------------------------------------------------
-    await AnalyticsCache.findOneAndUpdate(
-      { key: CACHE_KEY },
-      { data: finalStats, updatedAt: new Date() },
-      { upsert: true }
-    );
-    console.log("✅ Dashboard stats computed & cached");
 
+
+    //------------------------------------------------
+    // DONE
+    //------------------------------------------------
     return res.json({ success: true, data: finalStats });
   } catch (error) {
     console.error("getOrderStats ERROR:", error);
-    return res.status(500).json({ success: false, message: "Failed to fetch order stats" });
+    return res
+      .status(500)
+      .json({ success: false, message: "Failed to fetch order stats" });
   }
 };
 
 //------------------------------------------------
-// ✅ GET /admin/orders/sales-overview (Cached)
+// GET /admin/orders/sales-overview  (30-day line chart)
 //------------------------------------------------
 export const getSalesOverview = async (req, res) => {
   try {
-    const CACHE_KEY = "admin:sales_overview";
-    const CACHE_TTL_MS = 10 * 60 * 1000;
-
-    const cache = await AnalyticsCache.findOne({ key: CACHE_KEY });
-    if (cache && Date.now() - cache.updatedAt.getTime() < CACHE_TTL_MS) {
-      console.log("📦 Sales overview served from Mongo cache");
-      return res.json({ success: true, data: cache.data });
-    }
-
     const now = new Date();
     const last30Days = new Date();
     last30Days.setDate(last30Days.getDate() - 30);
@@ -513,30 +539,43 @@ export const getSalesOverview = async (req, res) => {
       { $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 } },
     ]);
 
+    //------------------------------------------------
+    // ✅ FIX — Create full 30-day timeline
+    //------------------------------------------------
     const map = {};
+
     raw.forEach((d) => {
       const dateStr = `${d._id.day}/${d._id.month}`;
-      map[dateStr] = { date: dateStr, revenue: d.revenue, orders: d.orders };
+      map[dateStr] = {
+        date: dateStr,
+        revenue: d.revenue,
+        orders: d.orders,
+      };
     });
 
     const formatted = [];
     const temp = new Date(last30Days);
+
     for (let i = 0; i < 30; i++) {
       const dateStr = `${temp.getDate()}/${temp.getMonth() + 1}`;
-      formatted.push(map[dateStr] || { date: dateStr, revenue: 0, orders: 0 });
+
+      formatted.push(
+        map[dateStr] || {
+          date: dateStr,
+          revenue: 0,
+          orders: 0,
+        }
+      );
+
       temp.setDate(temp.getDate() + 1);
     }
-
-    await AnalyticsCache.findOneAndUpdate(
-      { key: CACHE_KEY },
-      { data: formatted, updatedAt: new Date() },
-      { upsert: true }
-    );
-    console.log("✅ Sales overview cached");
 
     return res.json({ success: true, data: formatted });
   } catch (error) {
     console.error("getSalesOverview ERROR:", error);
-    return res.status(500).json({ success: false, message: "Failed to fetch sales overview" });
+    return res
+      .status(500)
+      .json({ success: false, message: "Failed to fetch sales overview" });
   }
 };
+
