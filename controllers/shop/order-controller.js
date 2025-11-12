@@ -4,7 +4,7 @@ import Order from "../../models/Order.js";
 import Cart from "../../models/Cart.js";
 import Product from "../../models/Product.js";
 import User from "../../models/User.js";
-
+import AnalyticsCache from "../../models/AnalyticsCache.js";
 // ✅ Email
 import { sendEmail } from "../../src/utils/sendEmail.js";
 import { orderPlacedTemplate } from "../../src/templates/orderPlacedTemplate.js";
@@ -104,6 +104,10 @@ export const createOrder = async (req, res) => {
       });
 
       await newOrder.save();
+      await AnalyticsCache.deleteMany({
+  key: { $in: ["admin:order_stats", "admin:sales_overview"] },
+});
+console.log("🧹 Cleared dashboard cache due to order change");
 
       let session;
       try {
@@ -194,7 +198,11 @@ const updatedOrder = await Order.findOneAndUpdate(
   { $set: { emailSent: true } },
   { new: true }
 );
-
+await AnalyticsCache.deleteMany({
+  key: { $in: ["admin:order_stats", "admin:sales_overview"] },
+});
+console.log("🧹 Cleared dashboard cache due to order change");
+      
 if (updatedOrder) {
   try {
     await sendEmail({
@@ -289,7 +297,11 @@ const updatedOrder = await Order.findOneAndUpdate(
   { $set: { emailSent: true } },
   { new: true }
 );
-
+await AnalyticsCache.deleteMany({
+  key: { $in: ["admin:order_stats", "admin:sales_overview"] },
+});
+console.log("🧹 Cleared dashboard cache due to order change");
+      
 if (updatedOrder) {
   try {
     await sendEmail({
