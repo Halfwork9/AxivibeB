@@ -255,38 +255,74 @@ export const getOrderStats = async (req, res) => {
     //------------------------------------------------
     // 9️⃣ Brand Sales Performance
     //------------------------------------------------
-    try {
-      const brandAgg = await Order.aggregate([
-        { $unwind: "$cartItems" },
-        {
-          $group: {
-            _id: "$cartItems.brandId",
-            qty: { $sum: "$cartItems.quantity" },
-            revenue: {
-              $sum: { $multiply: ["$cartItems.quantity", "$cartItems.price"] },
-            },
-            orders: { $addToSet: "$_id" },
-          },
-        },
-        { $addFields: { orderCount: { $size: "$orders" } } },
-        { $sort: { revenue: -1 } },
-        { $limit: 10 },
-      ]);
+   
+try {
+  const brandAgg = await Order.aggregate([
+    { $match: { cartItems: { $exists: true, $ne: [] } } },
+    { $unwind: "$cartItems" },
 
-      const brandIds = brandAgg.map((b) => b._id).filter(Boolean);
-      const brands = await Brand.find({ _id: { $in: brandIds } }).select("name");
-      const brandMap = Object.fromEntries(brands.map((b) => [b._id.toString(), b.name]));
+    // Convert data to numbers
+    {
+      $addFields: {
+        qty: { $toDouble: { $ifNull: ["$cartItems.quantity", 0] } },
+        price: { $toDouble: { $ifNull: ["$cartItems.price", 0] } },
+      },
+    },
 
-      finalStats.brandSalesPerformance = brandAgg.map((b) => ({
-        _id: b._id,
-        brand: brandMap[b._id?.toString()] || "Unknown",
-        qty: b.qty,
-        revenue: b.revenue,
-        orderCount: b.orderCount,
-      }));
-    } catch (err) {
-      console.log("⚠ brandSales error →", err.message);
-    }
+    // Join product → brand
+    {
+      $lookup: {
+        from: "products",
+        localField: "cartItems.productId",
+        foreignField: "_id",
+        as: "product",
+      },
+    },
+    { $unwind: "$product" },
+
+    {
+      $lookup: {
+        from: "brands",
+        localField: "product.brandId",
+        foreignField: "_id",
+        as: "brand",
+      },
+    },
+    { $unwind: "$brand" },
+
+    // ✅ Group by brand
+    {
+      $group: {
+        _id: "$brand._id",
+        brand: { $first: "$brand.name" },
+        qty: { $sum: "$qty" },
+        revenue: { $sum: { $multiply: ["$qty", "$price"] } },
+        orderIds: { $addToSet: "$_id" }, // collect order ids
+      },
+    },
+
+    // ✅ Count orders
+    {
+      $addFields: {
+        orderCount: { $size: "$orderIds" },
+      },
+    },
+
+    { $sort: { revenue: -1 } },
+    { $limit: 10 },
+  ]);
+
+  finalStats.brandSalesPerformance = brandAgg.map((b) => ({
+    _id: b._id,
+    brand: b.brand,
+    qty: b.qty,
+    revenue: b.revenue,
+    orderCount: b.orderCount,
+  }));
+} catch (e) {
+  console.log("⚠ brandSales error →", e.message);
+  finalStats.brandSalesPerformance = [];
+}
 
     //------------------------------------------------
     // 🔟 Payment Method Breakdown
@@ -312,7 +348,7 @@ export const getOrderStats = async (req, res) => {
     finalStats.paymentMethodBreakdown = Object.entries(normalized).map(
       ([method, count]) => ({ method, count })
     );
-
+ 
     //------------------------------------------------
     // 11️⃣ Category Sales (by revenue)
     //------------------------------------------------
@@ -361,7 +397,64 @@ export const getOrderStats = async (req, res) => {
     } catch (err) {
       console.log("⚠ categorySales error →", err.message);
     }
+   //------------------------------------------------
+// ✅ Determine Best Brand + Best Category based on Buyers → Qty
+//------------------------------------------------
+try {
+  if (finalStats.topProducts?.length > 0) {
+    const brandMap = {};
+    const categoryMap = {};
 
+    for (const p of finalStats.topProducts) {
+      const product = await Product.findById(p._id)
+        .select("brandId categoryId")
+        .populate("brandId", "name")
+        .populate("categoryId", "name")
+        .lean();
+
+      if (!product) continue;
+
+      const brandName = product.brandId?.name || "Unknown";
+      const categoryName = product.categoryId?.name || "Unknown";
+
+      // BRAND
+      if (!brandMap[brandName]) {
+        brandMap[brandName] = { buyers: 0, qty: 0 };
+      }
+      brandMap[brandName].buyers += p.buyers || 0;
+      brandMap[brandName].qty += p.totalQty || 0;
+
+      // CATEGORY
+      if (!categoryMap[categoryName]) {
+        categoryMap[categoryName] = { buyers: 0, qty: 0 };
+      }
+      categoryMap[categoryName].buyers += p.buyers || 0;
+      categoryMap[categoryName].qty += p.totalQty || 0;
+    }
+
+    // ✅ Sort brand by buyers → qty
+    const sortedBrands = Object.entries(brandMap)
+      .sort((a, b) => {
+        if (b[1].buyers !== a[1].buyers)
+          return b[1].buyers - a[1].buyers;
+        return b[1].qty - a[1].qty;
+      });
+
+    finalStats.bestSellingBrand = sortedBrands[0]?.[0] ?? null;
+
+    // ✅ Sort category by buyers → qty
+    const sortedCategories = Object.entries(categoryMap)
+      .sort((a, b) => {
+        if (b[1].buyers !== a[1].buyers)
+          return b[1].buyers - a[1].buyers;
+        return b[1].qty - a[1].qty;
+      });
+
+    finalStats.bestSellingCategory = sortedCategories[0]?.[0] ?? null;
+  }
+} catch (e) {
+  console.log("⚠ best brand/category calc error →", e.message);
+}
     //------------------------------------------------
     // ✅ Cache results
     //------------------------------------------------
