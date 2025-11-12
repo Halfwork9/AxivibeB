@@ -16,7 +16,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
 /**
  * ✅ CREATE ORDER
  * COD → Confirm immediately + email customer
- * Stripe → Create pending order → verify via webhook
+ * Stripe → Create pending order → verify via webhook or success page
  */
 export const createOrder = async (req, res) => {
   try {
@@ -26,18 +26,18 @@ export const createOrder = async (req, res) => {
       cartItems,
       addressInfo,
       totalAmount,
-      paymentMethod
+      paymentMethod,
     } = req.body;
 
     const user = await User.findById(userId).select("userName email");
-
-    if (!user) {
+    if (!user)
       return res.status(404).json({ success: false, message: "User not found" });
-    }
 
-    // ✅ Add brandId + categoryId to cart items
+    // ✅ Attach brandId + categoryId
     for (let item of cartItems) {
-      const product = await Product.findById(item.productId).select("brandId categoryId");
+      const product = await Product.findById(item.productId).select(
+        "brandId categoryId"
+      );
       item.brandId = product?.brandId ?? null;
       item.categoryId = product?.categoryId ?? null;
     }
@@ -46,8 +46,8 @@ export const createOrder = async (req, res) => {
     if (paymentMethod === "cod") {
       const newOrder = new Order({
         userId,
-        userName: user?.userName,
-        userEmail: user?.email,
+        userName: user.userName,
+        userEmail: user.email,
         cartId,
         cartItems,
         addressInfo,
@@ -59,8 +59,7 @@ export const createOrder = async (req, res) => {
         orderUpdateDate: new Date(),
       });
 
-      // ✅ Decrease stock
-      for (let item of cartItems) {
+      for (const item of cartItems) {
         await Product.findByIdAndUpdate(item.productId, {
           $inc: { totalStock: -item.quantity },
         });
@@ -69,15 +68,15 @@ export const createOrder = async (req, res) => {
       await Cart.findByIdAndDelete(cartId);
       const savedOrder = await newOrder.save();
 
-      // ✅ Send order email
       try {
         await sendEmail({
           to: user.email,
-          subject: "Order Placed",
+          subject: "Order Placed Successfully",
           html: orderPlacedTemplate(user.userName, savedOrder),
         });
+        console.log("✅ COD order email sent");
       } catch (err) {
-        console.log("⚠ Email send failed:", err.message);
+        console.log("⚠️ COD Email failed:", err.message);
       }
 
       return res.status(201).json({
@@ -87,12 +86,12 @@ export const createOrder = async (req, res) => {
       });
     }
 
-    // ✅ STRIPE
+    // ✅ STRIPE PAYMENT FLOW
     if (paymentMethod === "stripe") {
       const newOrder = new Order({
         userId,
-        userName: user?.userName,
-        userEmail: user?.email,
+        userName: user.userName,
+        userEmail: user.email,
         cartId,
         cartItems,
         addressInfo,
@@ -106,13 +105,11 @@ export const createOrder = async (req, res) => {
 
       await newOrder.save();
 
-      // ✅ Create Stripe Session
       let session;
       try {
         session = await stripe.checkout.sessions.create({
           payment_method_types: ["card"],
           mode: "payment",
-
           line_items: cartItems.map((item) => ({
             price_data: {
               currency: "inr",
@@ -124,10 +121,8 @@ export const createOrder = async (req, res) => {
             },
             quantity: item.quantity,
           })),
-
           success_url: `${process.env.FRONTEND_URL}/shop/payment-success?orderId=${newOrder._id}&session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${process.env.FRONTEND_URL}/shop/payment-cancel`,
-
           metadata: { orderId: newOrder._id.toString() },
         });
       } catch (err) {
@@ -138,7 +133,7 @@ export const createOrder = async (req, res) => {
       return res.status(200).json({ success: true, url: session.url });
     }
 
-    return res.status(400).json({ success: false, message: "Invalid payment method" });
+    res.status(400).json({ success: false, message: "Invalid payment method" });
   } catch (error) {
     console.error("createOrder ERROR:", error);
     res.status(500).json({ success: false, message: "Server error" });
@@ -146,12 +141,11 @@ export const createOrder = async (req, res) => {
 };
 
 /**
- * ✅ WEBHOOK → Stripe confirms payment
- * MUST be raw body in server.js
+ * ✅ STRIPE WEBHOOK
+ * Fires automatically after Stripe payment succeeds (even if user closes page)
  */
 export const stripeWebhook = async (req, res) => {
   let event;
-
   try {
     const sig = req.headers["stripe-signature"];
     event = stripe.webhooks.constructEvent(
@@ -160,13 +154,12 @@ export const stripeWebhook = async (req, res) => {
       process.env.STRIPE_WEBHOOK_SECRET
     );
   } catch (err) {
-    console.error("Webhook signature failed:", err.message);
+    console.error("❌ Webhook signature verification failed:", err.message);
     return res.sendStatus(400);
   }
-  
- console.log("🔥 Stripe webhook hit:", event.type);
- console.log("📌 Full event:", JSON.stringify(event, null, 2));
-  
+
+  console.log("🔥 Stripe webhook hit:", event.type);
+
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
     const orderId = session.metadata.orderId;
@@ -175,8 +168,10 @@ export const stripeWebhook = async (req, res) => {
       const order = await Order.findById(orderId);
       if (!order) return res.status(404).json({ error: "Order not found" });
 
+      // ✅ Avoid duplicate handling
       if (order.paymentStatus === "paid") {
-        return res.json({ received: true }); // ignore duplicate
+        console.log(`⚠️ Order ${orderId} already marked as paid, skipping.`);
+        return res.json({ received: true });
       }
 
       order.paymentStatus = "paid";
@@ -184,7 +179,6 @@ export const stripeWebhook = async (req, res) => {
       order.paymentId = session.payment_intent;
       order.orderUpdateDate = new Date();
 
-      // ✅ Decrease stock
       for (const item of order.cartItems) {
         await Product.findByIdAndUpdate(item.productId, {
           $inc: { totalStock: -item.quantity },
@@ -194,102 +188,103 @@ export const stripeWebhook = async (req, res) => {
       await Cart.findByIdAndDelete(order.cartId);
       await order.save();
 
-      // ✅ Send confirmation email
+      // ✅ Send email (only once)
       try {
-  await sendEmail({
-    to: order.userEmail,
-    subject: "Order Confirmed",
-    html: orderPlacedTemplate(order.userName, order),
-  });
-} catch (err) {
-  console.log("⚠ Email failed:", err.message);
-}
+        await sendEmail({
+          to: order.userEmail,
+          subject: "Order Confirmed — Payment Received",
+          html: orderPlacedTemplate(order.userName, order),
+        });
+        console.log(`✅ Stripe order email sent for order ${orderId}`);
+      } catch (err) {
+        console.log("⚠️ Stripe email failed:", err.message);
+      }
 
-      console.log(`✅ Order ${orderId} confirmed`);
+      console.log(`✅ Webhook confirmed order ${orderId}`);
     } catch (error) {
-      console.error("Webhook handler ERROR:", error);
+      console.error("❌ Webhook handler ERROR:", error);
     }
   }
 
   res.json({ received: true });
 };
 
-
+/**
+ * ✅ VERIFY STRIPE PAYMENT (backup)
+ * Used by frontend after redirect success — confirms if webhook hasn’t fired yet
+ */
 export const verifyStripePayment = async (req, res) => {
   try {
     const { orderId, session_id } = req.body;
 
-    if (!orderId) {
+    if (!orderId)
       return res
         .status(400)
         .json({ success: false, message: "Order ID is required" });
-    }
 
-    let order = await Order.findById(orderId);
-
-    if (!order) {
+    const order = await Order.findById(orderId);
+    if (!order)
       return res
         .status(404)
         .json({ success: false, message: "Order not found" });
-    }
 
-    // ✅ Already Verified → return
+    // Already handled by webhook → skip duplicate
     if (order.paymentStatus === "paid") {
       return res.json({
         success: true,
+        message: "Already verified via webhook",
         data: order,
-        message: "Already verified",
       });
     }
 
-    if (order.paymentMethod !== "stripe") {
-      return res.json({
-        success: true,
-        data: order,
-        message: "Not a Stripe order",
-      });
-    }
-
-    // ✅ Get stored or received session_id
     const stripeSessionId = session_id || order.paymentId;
-    if (!stripeSessionId) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing Stripe Session ID",
-      });
-    }
-
     const session = await stripe.checkout.sessions.retrieve(stripeSessionId);
 
     if (session.payment_status === "paid") {
-      // ✅ Update order only (NO EMAIL, NO STOCK)
       order.paymentStatus = "paid";
       order.orderStatus = "confirmed";
       order.paymentId = stripeSessionId;
       order.orderUpdateDate = new Date();
 
+      for (const item of order.cartItems) {
+        await Product.findByIdAndUpdate(item.productId, {
+          $inc: { totalStock: -item.quantity },
+        });
+      }
+
+      await Cart.findByIdAndDelete(order.cartId);
       await order.save();
+
+      try {
+        await sendEmail({
+          to: order.userEmail,
+          subject: "Order Confirmed — Payment Verified",
+          html: orderPlacedTemplate(order.userName, order),
+        });
+        console.log(`✅ Backup email sent via verifyStripePayment for ${orderId}`);
+      } catch (err) {
+        console.log("⚠️ verifyStripePayment email failed:", err.message);
+      }
 
       return res.json({
         success: true,
         data: order,
-        message: "Payment verified",
+        message: "Payment verified via frontend",
       });
     }
 
     return res.json({
       success: false,
-      message: "Not paid yet",
+      message: "Payment not completed yet",
       data: order,
     });
   } catch (error) {
     console.error("verifyStripePayment ERROR:", error);
-    return res
+    res
       .status(500)
       .json({ success: false, message: "Stripe verification failed" });
   }
 };
-
 
 
 //  Get orders for a user
