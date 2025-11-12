@@ -7,7 +7,7 @@ import {
   updatePaymentStatus,
   debugCategoryData,
 } from "../../controllers/admin/order-controller.js";
-import { clearDashboardCache } from "../controllers/admin/cache-controller.js";
+import { clearDashboardCache } from "../../controllers/admin/cache-controller.js";
 import {
   getOrderStats,
   getSalesOverview,
