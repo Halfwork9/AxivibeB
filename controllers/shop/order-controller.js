@@ -165,6 +165,7 @@ export const stripeWebhook = async (req, res) => {
   }
   
  console.log("🔥 Stripe webhook hit:", event.type);
+ console.log("📌 Full event:", JSON.stringify(event, null, 2));
   
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
