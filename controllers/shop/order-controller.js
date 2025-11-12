@@ -217,19 +217,20 @@ export const verifyStripePayment = async (req, res) => {
   try {
     const { orderId, session_id } = req.body;
 
-    if (!orderId)
-      return res
-        .status(400)
-        .json({ success: false, message: "Order ID is required" });
+    if (!orderId) {
+      return res.status(400).json({
+        success: false,
+        message: "Order ID is required",
+      });
+    }
 
     const order = await Order.findById(orderId);
     if (!order)
-      return res
-        .status(404)
-        .json({ success: false, message: "Order not found" });
+      return res.status(404).json({ success: false, message: "Order not found" });
 
-    // Already handled by webhook → skip duplicate
+    // ✅ If already marked paid → skip duplicate
     if (order.paymentStatus === "paid") {
+      console.log(`⚠️ Skipping duplicate verifyStripePayment for ${orderId}`);
       return res.json({
         success: true,
         message: "Already verified via webhook",
@@ -237,10 +238,27 @@ export const verifyStripePayment = async (req, res) => {
       });
     }
 
+    // Not a Stripe order
+    if (order.paymentMethod !== "stripe") {
+      return res.json({
+        success: true,
+        data: order,
+        message: "Not a Stripe order",
+      });
+    }
+
     const stripeSessionId = session_id || order.paymentId;
+    if (!stripeSessionId) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing Stripe Session ID",
+      });
+    }
+
     const session = await stripe.checkout.sessions.retrieve(stripeSessionId);
 
     if (session.payment_status === "paid") {
+      // ✅ Update order
       order.paymentStatus = "paid";
       order.orderStatus = "confirmed";
       order.paymentId = stripeSessionId;
@@ -255,13 +273,20 @@ export const verifyStripePayment = async (req, res) => {
       await Cart.findByIdAndDelete(order.cartId);
       await order.save();
 
+      // ✅ Send email only if it hasn’t been sent yet
       try {
-        await sendEmail({
-          to: order.userEmail,
-          subject: "Order Confirmed — Payment Verified",
-          html: orderPlacedTemplate(order.userName, order),
-        });
-        console.log(`✅ Backup email sent via verifyStripePayment for ${orderId}`);
+        if (!order.emailSent) {
+          await sendEmail({
+            to: order.userEmail,
+            subject: "Order Confirmed — Payment Verified",
+            html: orderPlacedTemplate(order.userName, order),
+          });
+          console.log(`✅ Email sent once for order ${orderId}`);
+          order.emailSent = true;
+          await order.save();
+        } else {
+          console.log(`⚠️ Email already sent for ${orderId}, skipping duplicate`);
+        }
       } catch (err) {
         console.log("⚠️ verifyStripePayment email failed:", err.message);
       }
@@ -280,7 +305,7 @@ export const verifyStripePayment = async (req, res) => {
     });
   } catch (error) {
     console.error("verifyStripePayment ERROR:", error);
-    res
+    return res
       .status(500)
       .json({ success: false, message: "Stripe verification failed" });
   }
