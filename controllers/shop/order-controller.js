@@ -188,17 +188,27 @@ export const stripeWebhook = async (req, res) => {
       await Cart.findByIdAndDelete(order.cartId);
       await order.save();
 
-      // ✅ Send email (only once)
-      try {
-        await sendEmail({
-          to: order.userEmail,
-          subject: "Order Confirmed — Payment Received",
-          html: orderPlacedTemplate(order.userName, order),
-        });
-        console.log(`✅ Stripe order email sent for order ${orderId}`);
-      } catch (err) {
-        console.log("⚠️ Stripe email failed:", err.message);
-      }
+     // ✅ Send email only if not sent yet (atomic check)
+const updatedOrder = await Order.findOneAndUpdate(
+  { _id: orderId, emailSent: false },
+  { $set: { emailSent: true } },
+  { new: true }
+);
+
+if (updatedOrder) {
+  try {
+    await sendEmail({
+      to: order.userEmail,
+      subject: "Order Confirmed — Payment Received",
+      html: orderPlacedTemplate(order.userName, order),
+    });
+    console.log(`✅ Stripe webhook email sent for ${orderId}`);
+  } catch (err) {
+    console.log("⚠️ Stripe email failed:", err.message);
+  }
+} else {
+  console.log(`⚠️ Email already sent for ${orderId}, skipping duplicate`);
+}
 
       console.log(`✅ Webhook confirmed order ${orderId}`);
     } catch (error) {
@@ -273,23 +283,27 @@ export const verifyStripePayment = async (req, res) => {
       await Cart.findByIdAndDelete(order.cartId);
       await order.save();
 
-      // ✅ Send email only if it hasn’t been sent yet
-      try {
-        if (!order.emailSent) {
-          await sendEmail({
-            to: order.userEmail,
-            subject: "Order Confirmed — Payment Verified",
-            html: orderPlacedTemplate(order.userName, order),
-          });
-          console.log(`✅ Email sent once for order ${orderId}`);
-          order.emailSent = true;
-          await order.save();
-        } else {
-          console.log(`⚠️ Email already sent for ${orderId}, skipping duplicate`);
-        }
-      } catch (err) {
-        console.log("⚠️ verifyStripePayment email failed:", err.message);
-      }
+     // ✅ Send email only if not sent yet (atomic check)
+const updatedOrder = await Order.findOneAndUpdate(
+  { _id: orderId, emailSent: false },
+  { $set: { emailSent: true } },
+  { new: true }
+);
+
+if (updatedOrder) {
+  try {
+    await sendEmail({
+      to: order.userEmail,
+      subject: "Order Confirmed — Payment Verified",
+      html: orderPlacedTemplate(order.userName, order),
+    });
+    console.log(`✅ Email sent once for order ${orderId}`);
+  } catch (err) {
+    console.log("⚠️ verifyStripePayment email failed:", err.message);
+  }
+} else {
+  console.log(`⚠️ Email already sent for ${orderId}, skipping duplicate`);
+}
 
       return res.json({
         success: true,
