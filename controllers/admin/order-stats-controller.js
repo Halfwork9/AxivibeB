@@ -254,30 +254,43 @@ export const getOrderStats = async (req, res) => {
     }
 
     //------------------------------------------------
-    // 8) Top Customers (by totalSpent)
+    // 8)Top Customers (lifetime)
     //------------------------------------------------
-    try {
-      const topCustAgg = await Order.aggregate([
-        { $group: { _id: "$userId", totalSpent: { $sum: "$totalAmount" }, orderCount: { $sum: 1 } } },
-        { $sort: { totalSpent: -1 } },
-        { $limit: 5 },
-      ]);
+  let topCustomers = [];
+try {
+  const topCustAgg = await Order.aggregate([
+    {
+      $group: {
+        _id: "$userId",
+        totalSpent: { $sum: "$totalAmount" },
+        orderCount: { $sum: 1 },
+      },
+    },
+    { $sort: { totalSpent: -1 } },
+    { $limit: 5 },
+  ]);
 
-      const userIds = topCustAgg.map((c) => mongoose.Types.ObjectId(c._id));
-      const users = await User.find({ _id: { $in: userIds } }).select("userName email").lean();
-      const userMap = Object.fromEntries(users.map((u) => [u._id.toString(), u]));
+  topCustomers = await Promise.all(
+    topCustAgg.map(async (c) => {
+      if (!c._id) return null;
 
-      finalStats.topCustomers = topCustAgg.map((c) => ({
+      const user = await User.findById(c._id).select("userName email");
+
+      return {
         userId: c._id,
-        name: userMap[c._id]?.userName || "Unknown",
-        email: userMap[c._id]?.email || "",
+        name: user?.userName || "Unknown",
+        email: user?.email || "",
         orderCount: c.orderCount,
         totalSpent: c.totalSpent,
-      }));
-    } catch (e) {
-      finalStats.topCustomers = [];
-      console.log("⚠ topCustomers error →", e.message);
-    }
+      };
+    })
+  );
+
+  finalStats.topCustomers = topCustomers.filter(Boolean);
+} catch (err) {
+  console.log("⚠ topCustomers error →", err.message);
+}
+
 
     //------------------------------------------------
     // 9) Brand Sales Performance (using itemsNormalized)
