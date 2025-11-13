@@ -39,6 +39,11 @@ export const addProduct = async (req, res) => {
     });
 
     await newProduct.save();
+
+    // CLEAR PRODUCT CACHE whenever admin adds product
+await ProductCache.deleteMany({ key: /products:/ });
+console.log("🧹 Cleared product cache due to product update");
+
     res.status(201).json({ success: true, message: "Product added successfully.", data: newProduct });
   } catch (e) {
     console.error("Add product error:", e);
@@ -126,6 +131,9 @@ export const editProduct = async (req, res) => {
     if (!product) {
       return res.status(404).json({ success: false, message: "Product not found." });
     }
+// CLEAR PRODUCT CACHE whenever admin adds product
+await ProductCache.deleteMany({ key: /products:/ });
+console.log("🧹 Cleared product cache due to product update");
 
     res.status(200).json({ success: true, message: "Product updated successfully.", data: product });
   } catch (e) {
