@@ -1,5 +1,10 @@
+// src/controllers/admin/cache-controller.js
 import AnalyticsCache from "../../models/AnalyticsCache.js";
 
+/**
+ * DELETE /admin/analytics/cache
+ * Clears dashboard and sales overview cache
+ */
 export const clearDashboardCache = async (req, res) => {
   try {
     await AnalyticsCache.deleteMany({
@@ -7,11 +12,16 @@ export const clearDashboardCache = async (req, res) => {
     });
 
     console.log("🧹 Cleared dashboard caches manually");
-    return res.json({ success: true, message: "Dashboard cache cleared successfully" });
+
+    return res.json({
+      success: true,
+      message: "Dashboard cache cleared successfully",
+    });
   } catch (error) {
     console.error("clearDashboardCache ERROR:", error);
-    return res
-      .status(500)
-      .json({ success: false, message: "Failed to clear cache" });
+    return res.status(500).json({
+      success: false,
+      message: "Failed to clear cache",
+    });
   }
 };
