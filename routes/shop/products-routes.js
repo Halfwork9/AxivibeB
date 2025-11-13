@@ -9,18 +9,25 @@ import ProductCache from "../../models/ProductCache.js";
 
 const router = express.Router();
 
-// 🛍️ Fetch all products
+// 🛍️ Fetch all products (cached)
 router.get("/get", getAllProducts);
 
-// 🛒 Get single product details
+// 🛒 Product details (cached)
 router.get("/product-details/:id", getProductById);
 
-// ⭐ Add product review
+// ⭐ Add review
 router.post("/:productId/reviews", authMiddleware, addReview);
 
+// 🧹 Clear product cache
 router.delete("/clear-cache", async (req, res) => {
-  await ProductCache.deleteMany({});
-  res.json({ success: true, message: "Product cache cleared" });
+  try {
+    await ProductCache.deleteMany({});
+    console.log("🧹 Product cache cleared");
+    return res.json({ success: true, message: "Product cache cleared" });
+  } catch (err) {
+    console.error("❌ Error clearing product cache:", err);
+    return res.status(500).json({ success: false, message: "Failed to clear cache" });
+  }
 });
 
 export default router;
