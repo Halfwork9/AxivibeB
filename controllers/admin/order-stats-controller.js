@@ -38,7 +38,6 @@ export const getOrderStats = async (req, res) => {
     // Try cache
     const cache = await AnalyticsCache.findOne({ key: CACHE_KEY });
     if (cache && Date.now() - cache.updatedAt.getTime() < CACHE_TTL_MS) {
-      console.log("📦 Dashboard stats served from Mongo cache");
       return res.json({ success: true, data: cache.data });
     }
 
@@ -518,7 +517,6 @@ export const getSalesOverview = async (req, res) => {
 
     const cache = await AnalyticsCache.findOne({ key: CACHE_KEY });
     if (cache && Date.now() - cache.updatedAt.getTime() < CACHE_TTL_MS) {
-      console.log("📦 Sales overview served from Mongo cache");
       return res.json({ success: true, data: cache.data });
     }
 
@@ -564,7 +562,6 @@ export const getSalesOverview = async (req, res) => {
     // Cache
     try {
       await setCache(CACHE_KEY, formatted);
-      console.log("✅ Sales overview cached");
     } catch (e) {
       console.log("⚠ sales overview cache error →", e.message);
     }
