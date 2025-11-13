@@ -150,7 +150,7 @@ app.use("/api/admin/brands", brandRoutes);
 app.use("/api/admin/categories", categoryRoutes);
 app.use("/api/distributors", distributorRoutes);
 app.use("/api/shop/products", shopProductsRouter);
-
+app.use("/api/admin", adminRouter)
 // --- Serve React App ---
 // Serve static files from the React app
 app.use(express.static(path.join(__dirname, "dist")));
