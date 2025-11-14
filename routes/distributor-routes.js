@@ -41,8 +41,10 @@ router.post("/", authMiddleware, async (req, res) => {
       markets,
       status: "Submitted",
     });
+    
+   await clearDistributorCache();
+   res.status(201).json({ success: true, data: newApp });
 
-    res.status(201).json({ success: true, data: newApp });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
@@ -136,6 +138,7 @@ router.put("/:id/status", async (req, res) => {
     if (!distributor) {
       return res.status(404).json({ success: false, message: "Not found" });
     }
+    await clearDistributorCache();
     res.json({ success: true, data: distributor });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -153,7 +156,7 @@ router.delete("/:id", authMiddleware, async (req, res) => {
     if (!app) {
       return res.status(404).json({ success: false, message: "Application not found or not yours" });
     }
-
+    await clearDistributorCache();
     res.json({ success: true, message: "Application withdrawn successfully" });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -189,7 +192,7 @@ router.delete("/admin/:id", authMiddleware, async (req, res) => {
     if (!distributor) {
       return res.status(404).json({ success: false, message: "Application not found" });
     }
-
+    await clearDistributorCache();
     res.json({ success: true, message: "Distributor application deleted successfully" });
   } catch (err) {
     console.error("Admin delete error:", err);
@@ -200,6 +203,7 @@ router.delete("/admin/:id", authMiddleware, async (req, res) => {
 
 // ✅ Export at the very end
 export default router;
+
 
 
 
