@@ -14,9 +14,10 @@ router.post("/add", addProduct);
 router.put("/edit/:id", editProduct);
 router.delete("/delete/:id", deleteProduct);
 router.get("/get", fetchAllProducts);
+// 🔥 Clear only admin product cache
 router.delete("/clear-cache", async (req, res) => {
-  await ProductCache.deleteMany({});
-  res.json({ success: true, message: "Product cache cleared" });
+  await ProductCache.deleteMany({ key: /admin-products:/ });
+  res.json({ success: true, message: "Admin product cache cleared" });
 });
 
 export default router;
