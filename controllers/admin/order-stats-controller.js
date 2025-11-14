@@ -5,6 +5,7 @@ import Product from "../../models/Product.js";
 import Category from "../../models/Category.js";
 import Brand from "../../models/Brand.js";
 import User from "../../models/User.js";
+import Order from "../../models/Order.js";
 import AnalyticsCache from "../../models/AnalyticsCache.js"; // cache collection
 
 //------------------------------------------------
@@ -570,5 +571,60 @@ export const getSalesOverview = async (req, res) => {
   } catch (error) {
     console.error("getSalesOverview ERROR:", error);
     return res.status(500).json({ success: false, message: "Failed to fetch sales overview" });
+  }
+};
+
+export const getMonthlyRevenue = async (req, res) => {
+  try {
+    // Accept two modes:
+    // 1) monthsBack=0..n (convenient)
+    // 2) month=1..12 and year=YYYY (explicit)
+    const { monthsBack, month: qMonth, year: qYear } = req.query;
+
+    let start, end;
+    if (typeof qMonth !== "undefined" && typeof qYear !== "undefined") {
+      // explicit month/year provided
+      const monthNum = Number(qMonth) - 1; // JS Date months 0-11
+      const yearNum = Number(qYear);
+      start = new Date(yearNum, monthNum, 1);
+      end = new Date(yearNum, monthNum + 1, 1);
+    } else {
+      // fallback to monthsBack (default 0)
+      const mb = Number(isNaN(Number(monthsBack)) ? 0 : Number(monthsBack));
+      const now = new Date();
+      const targetMonth = new Date(now.getFullYear(), now.getMonth() - mb, 1);
+      start = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 1);
+      end = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 1);
+    }
+
+    // Aggregate delivered/completed orders revenue inside that month window.
+    // Support multiple possible order total fields (totalAmount, orderTotal, total)
+    const agg = await Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: start, $lt: end },
+          // include statuses you consider "counted" for revenue
+          orderStatus: { $in: ["Delivered", "Completed", "delivered", "completed"] },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          revenue: {
+            $sum: {
+              $ifNull: ["$totalAmount", "$orderTotal", "$total", 0],
+            },
+          },
+        },
+      },
+    ]);
+
+    const revenue = agg[0]?.revenue || 0;
+    const monthLabel = start.toLocaleString("default", { month: "long", year: "numeric" });
+
+    return res.json({ success: true, monthLabel, revenue });
+  } catch (err) {
+    console.error("getMonthlyRevenue error:", err);
+    return res.status(500).json({ success: false, message: "Failed to fetch monthly revenue" });
   }
 };
