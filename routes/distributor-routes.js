@@ -2,6 +2,14 @@ import express from "express";
 import DistributorApplication from "../models/DistributorApplication.js";
 import { authMiddleware } from "../controllers/auth/auth-controller.js";
 import { Parser } from "json2csv";
+import ProductCache from "../models/ProductCache.js";
+
+const clearDistributorCache = async () => {
+  await ProductCache.deleteMany({ key: /distributor-/ });
+  console.log("🧹 Cleared distributor cache");
+};
+
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 mins
 
 const router = express.Router();
 
@@ -40,9 +48,20 @@ router.post("/", authMiddleware, async (req, res) => {
   }
 });
 
-// --- GET current user's application
+// --- GET current user's application (cached)
 router.get("/status", authMiddleware, async (req, res) => {
   try {
+    const CACHE_KEY = `distributor-status:${req.user.id}`;
+
+    // 1) Check cache
+    const cache = await ProductCache.findOne({ key: CACHE_KEY });
+    if (cache && Date.now() - cache.updatedAt.getTime() < CACHE_TTL_MS) {
+      console.log("📦 Distributor status from cache");
+      return res.json({ success: true, data: cache.data });
+    }
+
+    console.log("⚙ Fetching distributor status...");
+
     let app = await DistributorApplication.findOne({ userId: req.user.id });
 
     if (!app) {
@@ -58,6 +77,13 @@ router.get("/status", authMiddleware, async (req, res) => {
       return res.status(404).json({ success: false, message: "No application found" });
     }
 
+    // Save to cache
+    await ProductCache.findOneAndUpdate(
+      { key: CACHE_KEY },
+      { data: app, updatedAt: new Date() },
+      { upsert: true }
+    );
+
     res.json({ success: true, data: app });
   } catch (err) {
     console.error("Status check error:", err);
@@ -65,15 +91,38 @@ router.get("/status", authMiddleware, async (req, res) => {
   }
 });
 
+
 // --- GET all distributors (admin)
+// --- GET all distributors (admin) with cache
 router.get("/", async (req, res) => {
   try {
+    const CACHE_KEY = "distributor-list:all";
+
+    // 1) Check cache
+    const cache = await ProductCache.findOne({ key: CACHE_KEY });
+    if (cache && Date.now() - cache.updatedAt.getTime() < CACHE_TTL_MS) {
+      console.log("📦 Distributor list served from cache");
+      return res.json({ success: true, data: cache.data });
+    }
+
+    console.log("⚙ Recomputing distributor list...");
+
+    // 2) Fetch fresh list
     const apps = await DistributorApplication.find().sort({ createdAt: -1 });
+
+    // 3) Save to cache
+    await ProductCache.findOneAndUpdate(
+      { key: CACHE_KEY },
+      { data: apps, updatedAt: new Date() },
+      { upsert: true }
+    );
+
     res.json({ success: true, data: apps });
   } catch (err) {
     res.status(500).json({ success: false, message: "Failed to fetch distributors" });
   }
 });
+
 
 // --- Update status (admin)
 router.put("/:id/status", async (req, res) => {
@@ -151,6 +200,7 @@ router.delete("/admin/:id", authMiddleware, async (req, res) => {
 
 // ✅ Export at the very end
 export default router;
+
 
 
 
