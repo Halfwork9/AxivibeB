@@ -228,16 +228,44 @@ try {
     }
 
     //------------------------------------------------
-    // 4) Total Revenue & AOV (lifetime)
-    //------------------------------------------------
-    try {
-      const revenueAgg = await Order.aggregate([{ $group: { _id: null, total: { $sum: "$totalAmount" } } }]);
-      const revenue = revenueAgg[0]?.total ?? 0;
-      finalStats.totalRevenue = revenue;
-      finalStats.avgOrderValue = totalOrders > 0 ? Number((revenue / totalOrders).toFixed(2)) : 0;
-    } catch (e) {
-      console.log("⚠ revenue/AOV error →", e.message);
-    }
+// 4) Total Revenue & AOV (lifetime) – ONLY completed revenues
+//------------------------------------------------
+try {
+  const revenueAgg = await Order.aggregate([
+    {
+      $match: {
+        orderStatus: {
+          $in: [
+            "Delivered", "delivered",
+            "Completed", "completed",
+            "Shipped", "shipped",
+          ],
+        },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        total: { 
+          $sum: {
+            $ifNull: ["$totalAmount", 0]
+          }
+        },
+        count: { $sum: 1 }
+      },
+    },
+  ]);
+
+  const revenue = revenueAgg[0]?.total ?? 0;
+  const countedOrders = revenueAgg[0]?.count ?? 0;
+
+  finalStats.totalRevenue = revenue;
+  finalStats.avgOrderValue =
+    countedOrders > 0 ? Number((revenue / countedOrders).toFixed(2)) : 0;
+
+} catch (e) {
+  console.log("⚠ lifetime revenue/AOV error →", e.message);
+}
 
     //------------------------------------------------
     // 5) Repeat customers
