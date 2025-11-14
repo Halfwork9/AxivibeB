@@ -5,7 +5,6 @@ import Product from "../../models/Product.js";
 import Category from "../../models/Category.js";
 import Brand from "../../models/Brand.js";
 import User from "../../models/User.js";
-import Order from "../../models/Order.js";
 import AnalyticsCache from "../../models/AnalyticsCache.js"; // cache collection
 
 //------------------------------------------------
