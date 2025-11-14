@@ -12,6 +12,7 @@ import {
   getOrderStats,
   getSalesOverview,
 } from "../../controllers/admin/order-stats-controller.js";
+import { getMonthlyRevenue } from "../../controllers/admin/order-stats-controller.js";
 
 const router = express.Router();
 
@@ -25,5 +26,6 @@ router.put("/:id/payment-status", updatePaymentStatus);
 router.get("/stats", getOrderStats);
 router.get("/sales-overview", getSalesOverview);
 router.delete("/analytics/cache", clearDashboardCache);
+router.get("/monthly-revenue", getMonthlyRevenue);
 
 export default router;
