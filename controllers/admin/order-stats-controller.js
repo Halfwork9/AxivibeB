@@ -100,41 +100,119 @@ export const getOrderStats = async (req, res) => {
     finalStats.pendingOrders = pendingOrders;
     finalStats.totalCustomers = uniqueCustomers.length;
 
-    //------------------------------------------------
-    // 2) Daily / Weekly / Monthly Revenue
-    //------------------------------------------------
-    try {
-      const now = new Date();
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const weekStart = new Date(now);
-      weekStart.setDate(weekStart.getDate() - 7);
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+   //------------------------------------------------
+// 2) Daily / Weekly / Monthly Revenue
+//------------------------------------------------
+try {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const weekStart = new Date(now);
+  weekStart.setDate(weekStart.getDate() - 7);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      const revAgg = await Order.aggregate([
-        {
-          $facet: {
-            today: [
-              { $match: { orderDate: { $gte: todayStart } } },
-              { $group: { _id: null, total: { $sum: "$totalAmount" } } },
-            ],
-            weekly: [
-              { $match: { orderDate: { $gte: weekStart } } },
-              { $group: { _id: null, total: { $sum: "$totalAmount" } } },
-            ],
-            monthly: [
-              { $match: { orderDate: { $gte: monthStart } } },
-              { $group: { _id: null, total: { $sum: "$totalAmount" } } },
-            ],
+  const revAgg = await Order.aggregate([
+    {
+      $facet: {
+        today: [
+          {
+            $match: {
+              $and: [
+                {
+                  $or: [
+                    { orderDate: { $gte: todayStart } },
+                    { createdAt: { $gte: todayStart } },
+                  ],
+                },
+                {
+                  orderStatus: {
+                    $in: [
+                      "Delivered", "delivered",
+                      "Completed", "completed",
+                      "Shipped", "shipped"
+                    ],
+                  },
+                },
+              ],
+            },
           },
-        },
-      ]);
+          {
+            $group: {
+              _id: null,
+              total: { $sum: "$totalAmount" },
+            },
+          },
+        ],
 
-      finalStats.todayRevenue = revAgg[0]?.today?.[0]?.total ?? 0;
-      finalStats.weeklyRevenue = revAgg[0]?.weekly?.[0]?.total ?? 0;
-      finalStats.monthlyRevenue = revAgg[0]?.monthly?.[0]?.total ?? 0;
-    } catch (e) {
-      console.log("⚠ Revenue calc error →", e.message);
-    }
+        weekly: [
+          {
+            $match: {
+              $and: [
+                {
+                  $or: [
+                    { orderDate: { $gte: weekStart } },
+                    { createdAt: { $gte: weekStart } },
+                  ],
+                },
+                {
+                  orderStatus: {
+                    $in: [
+                      "Delivered", "delivered",
+                      "Completed", "completed",
+                      "Shipped", "shipped"
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: "$totalAmount" },
+            },
+          },
+        ],
+
+        monthly: [
+          {
+            $match: {
+              $and: [
+                {
+                  $or: [
+                    { orderDate: { $gte: monthStart } },
+                    { createdAt: { $gte: monthStart } },
+                  ],
+                },
+                {
+                  orderStatus: {
+                    $in: [
+                      "Delivered", "delivered",
+                      "Completed", "completed",
+                      "Shipped", "shipped"
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: "$totalAmount" },
+            },
+          },
+        ],
+      },
+    },
+  ]);
+
+  finalStats.todayRevenue = revAgg[0]?.today?.[0]?.total ?? 0;
+  finalStats.weeklyRevenue = revAgg[0]?.weekly?.[0]?.total ?? 0;
+  finalStats.monthlyRevenue = revAgg[0]?.monthly?.[0]?.total ?? 0;
+
+} catch (e) {
+  console.log("⚠ Revenue calc error →", e.message);
+}
 
     //------------------------------------------------
     // 3) Low stock
