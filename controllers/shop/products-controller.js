@@ -5,31 +5,77 @@ import ProductCache from "../../models/ProductCache.js";
 // @route   GET /api/shop/products/get
 // @access  Public
 // CACHE TTL = 10 minutes
-const CACHE_TTL_MS = 10 * 60 * 1000;
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
+// @desc    Fetch products with filters + caching
+// @route   GET /api/shop/products/get
+// @access  Public
 export const getAllProducts = async (req, res) => {
   try {
-    const { category = "", brand = "", sortBy = "price-lowtohigh" } = req.query;
+    const {
+      category = "",
+      brand = "",
+      sortBy = "price-lowtohigh",
+      page = 1,
+      limit = 20,
+      isOnSale,
+      priceRange,
+      rating,
+    } = req.query;
 
-    // Create unique cache key based on query filters
-    const CACHE_KEY = `products:${category}:${brand}:${sortBy}`;
+    // ----------------------------
+    // Build unique CACHE KEY
+    // ----------------------------
+    const CACHE_KEY = `products:${category}:${brand}:${sortBy}:${page}:${limit}:${isOnSale}:${priceRange}:${rating}`;
 
-    // 1️⃣ Try cache first
+    // ----------------------------
+    // 1️⃣ Check MongoDB Cache
+    // ----------------------------
     const cache = await ProductCache.findOne({ key: CACHE_KEY });
 
     if (cache && Date.now() - cache.updatedAt.getTime() < CACHE_TTL_MS) {
       console.log("📦 Products served from cache");
-      return res.status(200).json({ success: true, data: cache.data });
+      return res.status(200).json(cache.response);
     }
 
     console.log("⚙️ Recomputing product list...");
 
-    // 2️⃣ Build filters
-    let filters = {};
-    if (category) filters.categoryId = { $in: category.split(",") };
-    if (brand) filters.brandId = { $in: brand.split(",") };
+    // ----------------------------
+    // 2️⃣ Build Filters
+    // ----------------------------
+    let filters = { isDeleted: { $ne: true } };
 
-    // 3️⃣ Sorting
+    // CATEGORY
+    if (category) {
+      filters.categoryId = { $in: category.split(",") };
+    }
+
+    // BRAND
+    if (brand) {
+      filters.brandId = { $in: brand.split(",") };
+    }
+
+    // ON SALE
+    if (isOnSale === "true") {
+      filters.isOnSale = true;
+    }
+
+    // PRICE RANGE
+    if (priceRange) {
+      const [min, max] = priceRange.split(",").map(Number);
+      if (!isNaN(min) && !isNaN(max)) {
+        filters.price = { $gte: min, $lte: max };
+      }
+    }
+
+    // RATING
+    if (rating) {
+      filters.averageReview = { $gte: Number(rating) };
+    }
+
+    // ----------------------------
+    // 3️⃣ Sorting Logic
+    // ----------------------------
     let sort = {};
     switch (sortBy) {
       case "price-lowtohigh":
@@ -44,27 +90,53 @@ export const getAllProducts = async (req, res) => {
       case "title-ztoa":
         sort.title = -1;
         break;
-      default:
+      case "newest":
         sort.createdAt = -1;
+        break;
+      default:
+        sort.price = 1;
     }
 
-    // 4️⃣ Fetch fresh data
+    // ----------------------------
+    // 4️⃣ Pagination
+    // ----------------------------
+    const skip = (page - 1) * limit;
+
+    const totalProducts = await Product.countDocuments(filters);
+
     const products = await Product.find(filters)
       .populate("categoryId", "name")
       .populate("brandId", "name")
       .sort(sort)
+      .skip(skip)
+      .limit(Number(limit))
       .lean();
 
-    // 5️⃣ Save to cache
+    const totalPages = Math.ceil(totalProducts / limit);
+
+    const response = {
+      success: true,
+      data: products,
+      pagination: {
+        totalProducts,
+        totalPages,
+        currentPage: Number(page),
+        limit: Number(limit),
+      },
+    };
+
+    // ----------------------------
+    // 5️⃣ Save to Cache
+    // ----------------------------
     await ProductCache.findOneAndUpdate(
       { key: CACHE_KEY },
-      { data: products, updatedAt: new Date() },
+      { response, updatedAt: new Date() },
       { upsert: true }
     );
 
     console.log("✅ Products computed & cached");
 
-    res.status(200).json({ success: true, data: products });
+    return res.status(200).json(response);
   } catch (e) {
     console.error("Error in getAllProducts:", e);
     res.status(500).json({ success: false, message: "Server Error" });
