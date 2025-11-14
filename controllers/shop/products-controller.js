@@ -16,66 +16,56 @@ export const getAllProducts = async (req, res) => {
       category = "",
       brand = "",
       sortBy = "price-lowtohigh",
+      isOnSale = "",
+      priceRange = "",
+      rating = "",
       page = 1,
       limit = 20,
-      isOnSale,
-      priceRange,
-      rating,
     } = req.query;
 
-    // ----------------------------
-    // Build unique CACHE KEY
-    // ----------------------------
-    const CACHE_KEY = `products:${category}:${brand}:${sortBy}:${page}:${limit}:${isOnSale}:${priceRange}:${rating}`;
+    // -----------------------------
+    // 1️⃣ Build a unique cache key
+    // -----------------------------
+    const CACHE_KEY = `products:${category}:${brand}:${sortBy}:${isOnSale}:${priceRange}:${rating}:${page}:${limit}`;
 
-    // ----------------------------
-    // 1️⃣ Check MongoDB Cache
-    // ----------------------------
+    // Try cache first
     const cache = await ProductCache.findOne({ key: CACHE_KEY });
 
     if (cache && Date.now() - cache.updatedAt.getTime() < CACHE_TTL_MS) {
       console.log("📦 Products served from cache");
-      return res.status(200).json(cache.response);
+      return res.status(200).json({
+        success: true,
+        data: cache.data.products,
+        pagination: cache.data.pagination,
+      });
     }
 
-    console.log("⚙️ Recomputing product list...");
+    console.log("⚙️ Fetching fresh products...");
 
-    // ----------------------------
-    // 2️⃣ Build Filters
-    // ----------------------------
-    let filters = { isDeleted: { $ne: true } };
+    // -----------------------------
+    // 2️⃣ Build Mongo Filters
+    // -----------------------------
+    let filters = {};
 
-    // CATEGORY
-    if (category) {
-      filters.categoryId = { $in: category.split(",") };
-    }
+    if (category) filters.categoryId = { $in: category.split(",") };
+    if (brand) filters.brandId = { $in: brand.split(",") };
 
-    // BRAND
-    if (brand) {
-      filters.brandId = { $in: brand.split(",") };
-    }
-
-    // ON SALE
     if (isOnSale === "true") {
       filters.isOnSale = true;
     }
 
-    // PRICE RANGE
     if (priceRange) {
       const [min, max] = priceRange.split(",").map(Number);
-      if (!isNaN(min) && !isNaN(max)) {
-        filters.price = { $gte: min, $lte: max };
-      }
+      filters.price = { $gte: min || 0, $lte: max || 9999999 };
     }
 
-    // RATING
     if (rating) {
       filters.averageReview = { $gte: Number(rating) };
     }
 
-    // ----------------------------
-    // 3️⃣ Sorting Logic
-    // ----------------------------
+    // -----------------------------
+    // 3️⃣ Sorting
+    // -----------------------------
     let sort = {};
     switch (sortBy) {
       case "price-lowtohigh":
@@ -90,18 +80,18 @@ export const getAllProducts = async (req, res) => {
       case "title-ztoa":
         sort.title = -1;
         break;
-      case "newest":
-        sort.createdAt = -1;
-        break;
       default:
-        sort.price = 1;
+        sort.createdAt = -1;
     }
 
-    // ----------------------------
+    // -----------------------------
     // 4️⃣ Pagination
-    // ----------------------------
+    // -----------------------------
     const skip = (page - 1) * limit;
 
+    // -----------------------------
+    // 5️⃣ Query Database
+    // -----------------------------
     const totalProducts = await Product.countDocuments(filters);
 
     const products = await Product.find(filters)
@@ -112,37 +102,37 @@ export const getAllProducts = async (req, res) => {
       .limit(Number(limit))
       .lean();
 
-    const totalPages = Math.ceil(totalProducts / limit);
-
-    const response = {
-      success: true,
-      data: products,
-      pagination: {
-        totalProducts,
-        totalPages,
-        currentPage: Number(page),
-        limit: Number(limit),
-      },
+    const pagination = {
+      currentPage: Number(page),
+      totalPages: Math.ceil(totalProducts / limit),
+      totalProducts,
     };
 
-    // ----------------------------
-    // 5️⃣ Save to Cache
-    // ----------------------------
+    // -----------------------------
+    // 6️⃣ Save to Cache
+    // -----------------------------
     await ProductCache.findOneAndUpdate(
       { key: CACHE_KEY },
-      { response, updatedAt: new Date() },
+      { data: { products, pagination }, updatedAt: new Date() },
       { upsert: true }
     );
 
-    console.log("✅ Products computed & cached");
+    console.log("✅ Product list computed & cached");
 
-    return res.status(200).json(response);
-  } catch (e) {
-    console.error("Error in getAllProducts:", e);
-    res.status(500).json({ success: false, message: "Server Error" });
+    return res.status(200).json({
+      success: true,
+      data: products,
+      pagination,
+    });
+
+  } catch (err) {
+    console.error("❌ Error in getAllProducts:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
   }
 };
-
 
 // @desc    Fetch single product by ID
 // @route   GET /api/shop/products/product-details/:id
