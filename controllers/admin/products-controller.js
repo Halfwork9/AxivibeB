@@ -1,13 +1,16 @@
 import Product from "../../models/Product.js";
+import ProductCache from "../../models/ProductCache.js";
 
+// Cache TTL: 10 minutes
+const CACHE_TTL_MS = 10 * 60 * 1000;
 
-// ADD product
-// ADD product
-// ADD a new product
+/* ---------------------------------------------------------
+  ADD PRODUCT  (invalidate cache)
+--------------------------------------------------------- */
 export const addProduct = async (req, res) => {
   try {
     const {
-      images, // ✅ Expect an array of image URLs
+      images,
       title,
       description,
       categoryId,
@@ -18,7 +21,6 @@ export const addProduct = async (req, res) => {
       isOnSale,
     } = req.body;
 
-    // Validate that at least one image URL has been provided
     if (!images || !Array.isArray(images) || images.length === 0) {
       return res.status(400).json({
         success: false,
@@ -27,7 +29,7 @@ export const addProduct = async (req, res) => {
     }
 
     const newProduct = new Product({
-      images, // Save the array of images
+      images,
       title,
       description,
       categoryId,
@@ -40,27 +42,58 @@ export const addProduct = async (req, res) => {
 
     await newProduct.save();
 
-    // CLEAR PRODUCT CACHE whenever admin adds product
-await ProductCache.deleteMany({ key: /products:/ });
-console.log("🧹 Cleared product cache due to product update");
+    // 🔥 Clear all admin product cache
+    await ProductCache.deleteMany({ key: /admin-products:/ });
+    console.log("🧹 Cleared admin product cache (add)");
 
-    res.status(201).json({ success: true, message: "Product added successfully.", data: newProduct });
+    res.status(201).json({
+      success: true,
+      message: "Product added successfully",
+      data: newProduct,
+    });
   } catch (e) {
     console.error("Add product error:", e);
-    res.status(500).json({ success: false, message: "Error occurred while adding product." });
+    res.status(500).json({ success: false, message: "Error adding product" });
   }
 };
 
-// FETCH all products
+/* ---------------------------------------------------------
+  FETCH ALL PRODUCTS (Admin) — WITH CACHE
+--------------------------------------------------------- */
 export const fetchAllProducts = async (req, res) => {
   try {
-    const { categoryId, brandId, isOnSale, page = 1, limit = 20 } = req.query;
-    const filter = {};
+    const {
+      categoryId = "",
+      brandId = "",
+      isOnSale = "",
+      page = 1,
+      limit = 20,
+    } = req.query;
 
+    // Build Cache Key
+    const CACHE_KEY = `admin-products:${categoryId}:${brandId}:${isOnSale}:${page}:${limit}`;
+
+    // 1️⃣ Try Cache
+    const cache = await ProductCache.findOne({ key: CACHE_KEY });
+
+    if (cache && Date.now() - cache.updatedAt.getTime() < CACHE_TTL_MS) {
+      console.log("📦 Admin products served from cache");
+      return res.status(200).json({
+        success: true,
+        data: cache.data.products,
+        pagination: cache.data.pagination,
+      });
+    }
+
+    console.log("⚙️ Admin products recomputing...");
+
+    // 2️⃣ Build Filters
+    const filter = {};
     if (categoryId) filter.categoryId = categoryId;
     if (brandId) filter.brandId = brandId;
-    if (isOnSale !== undefined) filter.isOnSale = isOnSale === "true";
+    if (isOnSale !== "") filter.isOnSale = isOnSale === "true";
 
+    // 3️⃣ Query Products
     const products = await Product.find(filter)
       .populate("categoryId", "name")
       .populate("brandId", "name")
@@ -69,93 +102,95 @@ export const fetchAllProducts = async (req, res) => {
 
     const total = await Product.countDocuments(filter);
 
-    res.json({
-      success: true,
-      data: products,
+    const responseData = {
+      products,
       pagination: {
         total,
         currentPage: Number(page),
         totalPages: Math.ceil(total / limit),
       },
+    };
+
+    // 4️⃣ Save Cache
+    await ProductCache.findOneAndUpdate(
+      { key: CACHE_KEY },
+      { data: responseData, updatedAt: new Date() },
+      { upsert: true }
+    );
+
+    console.log("✅ Admin products cached");
+
+    res.status(200).json({
+      success: true,
+      data: products,
+      pagination: responseData.pagination,
     });
   } catch (err) {
-    console.error(err);
+    console.error("Admin fetch error:", err);
     res.status(500).json({ success: false, message: "Error occurred" });
   }
 };
 
-// GET product details
-export const getProductDetails = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const product = await Product.findById(id)
-      .populate("categoryId", "name")
-      .populate("brandId", "name");
-
-    if (!product) {
-      return res.status(404).json({ success: false, message: "Product not found!" });
-    }
-
-    res.status(200).json({ success: true, data: product });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ success: false, message: "Some error occurred" });
-  }
-};
-
-
-
-// EDIT an existing product
+/* ---------------------------------------------------------
+  EDIT PRODUCT — CLEAR CACHE
+--------------------------------------------------------- */
 export const editProduct = async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = req.body;
 
-    // Validate that at least one image URL is present in the update
-    if (!updateData.images || !Array.isArray(updateData.images) || updateData.images.length === 0) {
+    if (!updateData.images || updateData.images.length === 0) {
       return res.status(400).json({
         success: false,
         message: "At least one product image is required.",
       });
     }
 
-    // Handle the logic for toggling 'On Sale' status
-    if (updateData.isOnSale === false) {
-      updateData.salePrice = 0;
-    }
+    if (!updateData.isOnSale) updateData.salePrice = 0;
 
     const product = await Product.findByIdAndUpdate(id, updateData, {
       new: true,
     });
 
     if (!product) {
-      return res.status(404).json({ success: false, message: "Product not found." });
+      return res.status(404).json({ success: false, message: "Product not found" });
     }
-// CLEAR PRODUCT CACHE whenever admin adds product
-await ProductCache.deleteMany({ key: /products:/ });
-console.log("🧹 Cleared product cache due to product update");
 
-    res.status(200).json({ success: true, message: "Product updated successfully.", data: product });
+    // 🔥 Clear admin product cache
+    await ProductCache.deleteMany({ key: /admin-products:/ });
+    console.log("🧹 Cleared admin product cache (edit)");
+
+    res.status(200).json({
+      success: true,
+      message: "Product updated successfully",
+      data: product,
+    });
   } catch (e) {
     console.error("Edit product error:", e);
-    res.status(500).json({ success: false, message: "Error occurred while editing product." });
+    res.status(500).json({ success: false, message: "Error editing product" });
   }
 };
-// DELETE product
+
+/* ---------------------------------------------------------
+  DELETE PRODUCT — CLEAR CACHE
+--------------------------------------------------------- */
 export const deleteProduct = async (req, res) => {
   try {
     const { id } = req.params;
+
     const product = await Product.findByIdAndDelete(id);
 
     if (!product) {
       return res.status(404).json({ success: false, message: "Product not found" });
     }
 
+    // 🔥 Clear admin product cache
+    await ProductCache.deleteMany({ key: /admin-products:/ });
+    console.log("🧹 Cleared admin product cache (delete)");
+
     res.status(200).json({ success: true, message: "Product deleted successfully" });
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ success: false, message: "Error occurred" });
+    console.error("Delete product error:", e);
+    res.status(500).json({ success: false, message: "Error deleting product" });
   }
 };
-
-
