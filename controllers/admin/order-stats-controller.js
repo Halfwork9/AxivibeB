@@ -603,7 +603,14 @@ export const getMonthlyRevenue = async (req, res) => {
         $match: {
           createdAt: { $gte: start, $lt: end },
           // include statuses you consider "counted" for revenue
-          orderStatus: { $in: ["Delivered", "Completed", "delivered", "completed"] },
+          orderStatus: {
+  $in: [
+    "Delivered", "delivered",
+    "Completed", "completed",
+    "Shipped", "shipped"
+  ]
+},
+
         },
       },
       {
