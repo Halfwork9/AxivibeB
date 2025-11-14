@@ -1,51 +1,83 @@
 import Category from "../../models/Category.js";
+import ProductCache from "../../models/ProductCache.js";
 
-// Create category
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+/* ---------------------------------------------------
+   CREATE CATEGORY — CLEAR CACHE
+--------------------------------------------------- */
 export const createCategory = async (req, res) => {
   try {
     const { name, icon } = req.body;
 
     const exists = await Category.findOne({ name });
     if (exists) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Category already exists" });
+      return res.status(400).json({ success: false, message: "Category already exists" });
     }
 
-    const category = new Category({ name, icon });
-    await category.save();
+    const category = await Category.create({ name, icon });
 
-    res.status(201).json({ success: true, message: "Category created", category });
+    // 🔥 Clear category cache
+    await ProductCache.deleteMany({ key: /category-list:/ });
+    console.log("🧹 Cleared category cache (create)");
+
+    res.status(201).json({ success: true, data: category });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-// Get all categories
+/* ---------------------------------------------------
+   GET ALL CATEGORIES — WITH CACHE
+--------------------------------------------------- */
 export const getAllCategories = async (req, res) => {
   try {
-    const categories = await Category.find();
+    const CACHE_KEY = `category-list:all`;
+
+    // 1️⃣ Check cache
+    const cache = await ProductCache.findOne({ key: CACHE_KEY });
+    if (cache && Date.now() - cache.updatedAt.getTime() < CACHE_TTL_MS) {
+      console.log("📦 Categories from cache");
+      return res.json({ success: true, data: cache.data });
+    }
+
+    console.log("⚙️ Computing category list...");
+
+    const categories = await Category.find().sort({ name: 1 });
+
+    // 2️⃣ Save to cache
+    await ProductCache.findOneAndUpdate(
+      { key: CACHE_KEY },
+      { data: categories, updatedAt: new Date() },
+      { upsert: true }
+    );
+
+    console.log("✅ Category list cached");
+
     res.status(200).json({ success: true, data: categories });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-// Delete a category by ID
+/* ---------------------------------------------------
+   DELETE CATEGORY — CLEAR CACHE
+--------------------------------------------------- */
 export const deleteCategory = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const deletedCategory = await Category.findByIdAndDelete(id);
+  try {
+    const { id } = req.params;
 
-        if (!deletedCategory) {
-            return res.status(404).json({ success: false, message: "Category not found" });
-        }
-
-        res.status(200).json({ success: true, message: "Category deleted successfully" });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ success: false, message: "Server error" });
+    const deleted = await Category.findByIdAndDelete(id);
+    if (!deleted) {
+      return res.status(404).json({ success: false, message: "Category not found" });
     }
+
+    // 🔥 Clear category cache
+    await ProductCache.deleteMany({ key: /category-list:/ });
+   
+
+    res.json({ success: true, message: "Category deleted" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
 };
