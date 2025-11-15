@@ -99,48 +99,70 @@ export const getOrderStats = async (req, res) => {
     finalStats.deliveredOrders = deliveredOrders;
     finalStats.pendingOrders = pendingOrders;
     finalStats.totalCustomers = uniqueCustomers.length;
-
- //------------------------------------------------
-// 2) Daily / Weekly / Monthly Revenue (Exact financial revenue)
+//------------------------------------------------
+// 2) Daily / Weekly / Monthly Revenue (FIXED)
 //------------------------------------------------
 try {
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const weekStart = new Date(now);
-  weekStart.setDate(weekStart.getDate() - 7);
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const revenueMatch = {
-    orderStatus: {
-      $in: ["Delivered", "Completed", "Shipped", "delivered", "completed", "shipped"]
-    },
-    paymentStatus: { $in: ["Paid", "paid", "SUCCESS"] },
-    isCancelled: { $ne: true },
-    isReturned: { $ne: true },
-  };
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - 7);
+
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
   const revAgg = await Order.aggregate([
     {
       $facet: {
         today: [
-          { $match: { ...revenueMatch, createdAt: { $gte: todayStart } } },
-          { $group: { _id: null, total: { $sum: { $ifNull: ["$totalAmount", 0] } } } },
+          {
+            $match: {
+              $or: [
+                { orderDate: { $gte: todayStart } },
+                { createdAt: { $gte: todayStart } }
+              ],
+              paymentStatus: "paid",
+              orderStatus: { $in: ["delivered", "Delivered", "completed", "Completed"] }
+            }
+          },
+          { $group: { _id: null, total: { $sum: "$totalAmount" } } }
         ],
+
         weekly: [
-          { $match: { ...revenueMatch, createdAt: { $gte: weekStart } } },
-          { $group: { _id: null, total: { $sum: { $ifNull: ["$totalAmount", 0] } } } },
+          {
+            $match: {
+              $or: [
+                { orderDate: { $gte: weekStart } },
+                { createdAt: { $gte: weekStart } }
+              ],
+              paymentStatus: "paid",
+              orderStatus: { $in: ["delivered", "Delivered", "completed", "Completed"] }
+            }
+          },
+          { $group: { _id: null, total: { $sum: "$totalAmount" } } }
         ],
+
         monthly: [
-          { $match: { ...revenueMatch, createdAt: { $gte: monthStart } } },
-          { $group: { _id: null, total: { $sum: { $ifNull: ["$totalAmount", 0] } } } },
-        ],
-      },
-    },
+          {
+            $match: {
+              $or: [
+                { orderDate: { $gte: monthStart } },
+                { createdAt: { $gte: monthStart } }
+              ],
+              paymentStatus: "paid",
+              orderStatus: { $in: ["delivered", "Delivered", "completed", "Completed"] }
+            }
+          },
+          { $group: { _id: null, total: { $sum: "$totalAmount" } } }
+        ]
+      }
+    }
   ]);
 
   finalStats.todayRevenue = revAgg[0]?.today?.[0]?.total ?? 0;
   finalStats.weeklyRevenue = revAgg[0]?.weekly?.[0]?.total ?? 0;
   finalStats.monthlyRevenue = revAgg[0]?.monthly?.[0]?.total ?? 0;
+
 } catch (e) {
   console.log("⚠ Revenue calc error →", e.message);
 }
