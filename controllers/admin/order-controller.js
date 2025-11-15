@@ -69,29 +69,12 @@ export const getOrderDetailsForAdmin = async (req, res) => {
   try {
     const { id } = req.params;
 
-    let order = await Order.findById(id).lean();
+    const order = await Order.findById(id)
+      .populate("userId", "userName email")
+      .lean();
 
     if (!order) {
       return res.status(404).json({ success: false, message: "Order not found" });
-    }
-
-    // If userId is string, convert it to ObjectId safely
-    let userObjectId = null;
-
-    if (order.userId) {
-      try {
-        userObjectId = new mongoose.Types.ObjectId(order.userId);
-      } catch (err) {
-        userObjectId = null;
-      }
-    }
-
-    // Fetch user data manually (since populate cannot work on strings)
-    if (userObjectId) {
-      const user = await User.findById(userObjectId).select("userName email").lean();
-      order.userId = user || null;
-    } else {
-      order.userId = null;
     }
 
     return res.json({ success: true, data: order });
