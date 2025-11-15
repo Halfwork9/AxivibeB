@@ -567,27 +567,39 @@ try {
 };
 
 //------------------------------------------------
-// GET /admin/orders/sales-overview (30-day line chart) — cached
+// GET /admin/orders/sales-overview (30-day line chart) — FIXED
 //------------------------------------------------
 export const getSalesOverview = async (req, res) => {
   try {
     const CACHE_KEY = "admin:sales_overview";
-    const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+    const CACHE_TTL_MS = 10 * 60 * 1000;
 
     const cache = await AnalyticsCache.findOne({ key: CACHE_KEY });
     if (cache && Date.now() - cache.updatedAt.getTime() < CACHE_TTL_MS) {
       return res.json({ success: true, data: cache.data });
     }
 
-    const now = new Date();
     const last30Days = new Date();
-    last30Days.setDate(last30Days.getDate() - 29); // inclusive last 30 days
+    last30Days.setDate(last30Days.getDate() - 29);
 
     const raw = await Order.aggregate([
       {
         $match: {
-          $or: [{ orderDate: { $gte: last30Days } }, { createdAt: { $gte: last30Days } }],
-        },
+          $and: [
+            {
+              $or: [
+                { orderDate: { $gte: last30Days } },
+                { createdAt: { $gte: last30Days } }
+              ]
+            },
+            {
+              paymentStatus: "paid",
+            },
+            {
+              orderStatus: { $in: ["delivered", "Delivered", "completed", "Completed"] }
+            }
+          ]
+        }
       },
       {
         $group: {
@@ -603,7 +615,7 @@ export const getSalesOverview = async (req, res) => {
       { $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 } },
     ]);
 
-    // Build 30-day timeline (guarantee full timeline)
+    // Build timeline with full 30 days
     const map = {};
     raw.forEach((d) => {
       const dateStr = `${d._id.day}/${d._id.month}`;
@@ -618,12 +630,8 @@ export const getSalesOverview = async (req, res) => {
       temp.setDate(temp.getDate() + 1);
     }
 
-    // Cache
-    try {
-      await setCache(CACHE_KEY, formatted);
-    } catch (e) {
-      console.log("⚠ sales overview cache error →", e.message);
-    }
+    // Cache the result
+    await setCache(CACHE_KEY, formatted);
 
     return res.json({ success: true, data: formatted });
   } catch (error) {
