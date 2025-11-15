@@ -6,6 +6,7 @@ import { OAuth2Client } from "google-auth-library";
 import sgMail from "../../config/sendgrid.js"; // Adjust path as needed
 import { sendEmail } from "../../src/utils/sendEmail.js";
 import { welcomeTemplate } from "../../src/templates/welcomeTemplate.js";
+import { resetPasswordTemplate } from "../../src/templates/resetPasswordTemplate.js";
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -217,53 +218,92 @@ export const forgotPassword = async (req, res) => {
   },
   subject: "Reset Your Axivibe Password",
   text: `Hi ${user.userName || "there"},\n\nWe received a request to reset your password. Click here to set a new password (valid for 1 hour):\n${resetUrl}\n\nIf you didn’t request this, you can ignore this message.\n\nTeam Axivibe`,
-  html: `
-    <div style="font-family:'Segoe UI',Roboto,Arial,sans-serif; padding:24px; background:#f7f7f7;">
-      <div style="max-width:600px; margin:auto; background:white; border:1px solid #e5e5e5; border-radius:8px; overflow:hidden;">
-        
-        <!-- HEADER -->
-        <div style="background:#111827; padding:18px 24px;">
-          <h2 style="color:#fff; margin:0; font-size:20px; font-weight:600;">Password Reset Request</h2>
-        </div>
+ html: `
+  <div style="margin:0;padding:0;background:#f5f7fa;font-family:'Inter',Arial,sans-serif;">
+    <table role="presentation" style="width:100%;border-collapse:collapse;">
+      <tr>
+        <td align="center" style="padding:24px 0;">
+          <table role="presentation" style="width:600px;background:white;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
+            
+            <!-- HEADER -->
+            <tr>
+              <td style="background:#111827;padding:24px;text-align:center;">
+                <img src="https://res.cloudinary.com/daxujngz2/image/upload/v1730879546/axivibe-logo-white.png"
+                     alt="Axivibe"
+                     style="height:42px;margin-bottom:8px;" />
+                <h2 style="color:white;margin:0;font-size:22px;font-weight:600;">
+                  Password Reset Request
+                </h2>
+              </td>
+            </tr>
 
-        <!-- BODY -->
-        <div style="padding:24px; font-size:15px; color:#333; line-height:1.6;">
-          <p>Hello <strong>${user.userName || "User"}</strong>,</p>
+            <!-- BODY -->
+            <tr>
+              <td style="padding:32px;">
+                <p style="font-size:16px;color:#111;margin:0 0 16px;">
+                  Hi <strong>${user.userName || "there"}</strong>,
+                </p>
 
-          <p>
-            We received a request to reset the password associated with your Axivibe account.  
-            Please click the button below to create a new password.  
-            This link will remain valid for <strong>1 hour</strong>.
-          </p>
+                <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 16px;">
+                  We received a request to reset your Axivibe account password.  
+                  Click the button below to create a new password.
+                </p>
 
-          <div style="text-align:center; margin:30px 0;">
-            <a href="${resetUrl}" 
-              style="background:#2563eb; color:#fff; text-decoration:none; padding:12px 24px; 
-                     border-radius:6px; font-weight:500; display:inline-block;">
-              Reset Password
-            </a>
-          </div>
+                <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 16px;">
+                  This link is valid for <strong>1 hour</strong>.
+                </p>
 
-          <p>
-            If you did not request a password reset, no action is required.  
-            Your account remains secure.
-          </p>
+                <!-- BUTTON -->
+                <div style="text-align:center;margin:32px 0;">
+                  <a href="${resetUrl}"
+                     style="
+                        background:#4f46e5;
+                        color:#fff;
+                        padding:14px 28px;
+                        font-size:16px;
+                        border-radius:8px;
+                        text-decoration:none;
+                        display:inline-block;
+                        font-weight:600;
+                      ">
+                    Reset Password
+                  </a>
+                </div>
 
-          <p style="margin-top:30px; font-size:13px; color:#666;">
-            For security purposes, do not share this email or your password with anyone.
-          </p>
+                <p style="font-size:14px;color:#6b7280;line-height:1.5;margin:24px 0 16px;">
+                  If you did not request this, simply ignore this message — your password will remain unchanged.
+                </p>
 
-          <p style="margin-top:24px;">Regards,<br><strong>Axivibe Support Team</strong></p>
-        </div>
+                <p style="font-size:14px;color:#6b7280;margin:0;">
+                  Need help? Contact us anytime at  
+                  <a href="mailto:support@nikhilmamdekar.site" style="color:#4f46e5;text-decoration:none;">
+                    support@nikhilmamdekar.site
+                  </a>.
+                </p>
+              </td>
+            </tr>
 
-        <!-- FOOTER -->
-        <div style="background:#f3f4f6; padding:16px 24px; text-align:center; font-size:12px; color:#777;">
-          © ${new Date().getFullYear()} Axivibe. All rights reserved.
-        </div>
+            <!-- FOOTER -->
+            <tr>
+              <td style="background:#f3f4f6;padding:20px;text-align:center;">
+                <p style="font-size:12px;color:#6b7280;margin:0 0 6px;">
+                  © ${new Date().getFullYear()} <strong>Axivibe</strong>. All rights reserved.
+                </p>
 
-      </div>
-    </div>
-  `,
+                <p style="font-size:12px;color:#9ca3af;margin:0;">
+                  This email was sent to <strong>${user.email}</strong>.
+                  <br />
+                  If you didn’t request this email, you can safely ignore it.
+                </p>
+              </td>
+            </tr>
+
+          </table>
+        </td>
+      </tr>
+    </table>
+  </div>
+`,
 };
 
     await sgMail.send(msg);
