@@ -55,39 +55,63 @@ const sendTokenResponse = (res, user, message) => {
 // ✅ Register User
 //
 export const registerUser = async (req, res) => {
-  const { userName, email, password } = req.body;
   try {
+    const { userName, email, password } = req.body;
+
+    // 1️⃣ Validate
+    if (!userName || !email || !password) {
+      return res.status(400).json({ success: false, message: "All fields are required" });
+    }
+
+    // 2️⃣ Check if user exists
     const existing = await User.findOne({ email });
-    if (existing)
+    if (existing) {
       return res.json({
         success: false,
         message: "User already exists with that email.",
       });
-    if (!password)
-      return res.status(400).json({
-        success: false,
-        message: "Password is required",
-      });
+    }
+
+    // 3️⃣ Hash password
     const hash = await bcrypt.hash(password, 12);
+
+    // 4️⃣ Create user
     const newUser = new User({
       userName,
       email,
       password: hash,
       role: "user",
     });
+
     await newUser.save();
-    res.status(200).json({ success: true, message: "Registration successful" });
+
+    // 5️⃣ Send welcome email (safe — inside TRY)
+    try {
+      await sendEmail({
+        to: newUser.email,
+        subject: "Welcome to Axivibe 🎉",
+        html: welcomeTemplate(newUser.userName),
+      });
+      console.log("✅ Welcome email sent");
+    } catch (emailErr) {
+      console.error("⚠ Welcome email failed:", emailErr.message);
+    }
+
+    // 6️⃣ Final response
+    return res.status(200).json({
+      success: true,
+      message: "Registration successful",
+    });
+
   } catch (err) {
     console.error("Register error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
-  sendEmail({
-  to: newUser.email,
-  subject: "Welcome to Axivibe 🎉",
-  html: welcomeTemplate(newUser.userName),
-});
-
 };
+
 //
 // ✅ Email + Password Login
 //
